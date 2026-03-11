@@ -4083,6 +4083,10 @@
           "label": "Auto Backup",
           "off": "Off"
         },
+        "autoRestoreOnStartup": {
+          "title": "Auto Restore on Startup",
+          "help": "Checks WebDAV for a newer backup on startup and auto-restores it. Ideal for multi-device sync to ensure your data is always up-to-date."
+        },
         "backup": {
           "button": "Backup to WebDAV",
           "manager": {

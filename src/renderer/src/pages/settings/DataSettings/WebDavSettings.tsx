@@ -9,6 +9,7 @@ import { startAutoSync, stopAutoSync } from '@renderer/services/BackupService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import {
   setWebdavAutoSync,
+  setWebdavAutoRestoreOnStartup as _setWebdavAutoRestoreOnStartup,
   setWebdavDisableStream as _setWebdavDisableStream,
   setWebdavHost as _setWebdavHost,
   setWebdavMaxBackups as _setWebdavMaxBackups,
@@ -35,7 +36,8 @@ const WebDavSettings: FC = () => {
     webdavSyncInterval: webDAVSyncInterval,
     webdavMaxBackups: webDAVMaxBackups,
     webdavSkipBackupFile: webdDAVSkipBackupFile,
-    webdavDisableStream: webDAVDisableStream
+    webdavDisableStream: webDAVDisableStream,
+    webdavAutoRestoreOnStartup: webDAVAutoRestoreOnStartup
   } = useSettings()
 
   const [webdavHost, setWebdavHost] = useState<string | undefined>(webDAVHost)
@@ -44,6 +46,7 @@ const WebDavSettings: FC = () => {
   const [webdavPath, setWebdavPath] = useState<string | undefined>(webDAVPath)
   const [webdavSkipBackupFile, setWebdavSkipBackupFile] = useState<boolean>(webdDAVSkipBackupFile)
   const [webdavDisableStream, setWebdavDisableStream] = useState<boolean>(webDAVDisableStream)
+  const [webdavAutoRestoreOnStartup, setWebdavAutoRestoreOnStartup] = useState<boolean>(webDAVAutoRestoreOnStartup)
   const [backupManagerVisible, setBackupManagerVisible] = useState(false)
 
   const [syncInterval, setSyncInterval] = useState<number>(webDAVSyncInterval)
@@ -83,6 +86,11 @@ const WebDavSettings: FC = () => {
   const onDisableStreamChange = (value: boolean) => {
     setWebdavDisableStream(value)
     dispatch(_setWebdavDisableStream(value))
+  }
+
+  const onAutoRestoreOnStartupChange = (value: boolean) => {
+    setWebdavAutoRestoreOnStartup(value)
+    dispatch(_setWebdavAutoRestoreOnStartup(value))
   }
 
   const renderSyncStatus = () => {
@@ -236,6 +244,14 @@ const WebDavSettings: FC = () => {
       </SettingRow>
       <SettingRow>
         <SettingHelpText>{t('settings.data.webdav.disableStream.help')}</SettingHelpText>
+      </SettingRow>
+      <SettingDivider />
+      <SettingRow>
+        <SettingRowTitle>{t('settings.data.webdav.autoRestoreOnStartup.title')}</SettingRowTitle>
+        <Switch checked={webdavAutoRestoreOnStartup} onChange={onAutoRestoreOnStartupChange} disabled={!webdavHost} />
+      </SettingRow>
+      <SettingRow>
+        <SettingHelpText>{t('settings.data.webdav.autoRestoreOnStartup.help')}</SettingHelpText>
       </SettingRow>
       {webdavSync && syncInterval > 0 && (
         <>
