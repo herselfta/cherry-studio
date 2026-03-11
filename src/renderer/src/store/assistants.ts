@@ -1,7 +1,7 @@
 /**
  * @deprecated Scheduled for removal in v2.0.0
  * --------------------------------------------------------------------------
- * ⚠️ NOTICE: V2 DATA&UI REFACTORING (by 0xfullex)
+ * ⚠️ NOTICE: V02 DATA&UI REFACTORING (by 0xfullex)
  * --------------------------------------------------------------------------
  * STOP: Feature PRs affecting this file are currently BLOCKED.
  * Only critical bug fixes are accepted during this migration phase.
