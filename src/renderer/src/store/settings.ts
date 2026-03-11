@@ -140,7 +140,6 @@ export interface SettingsState {
   webdavMaxBackups: number
   webdavSkipBackupFile: boolean
   webdavDisableStream: boolean
-  webdavAutoRestoreOnStartup: boolean
   translateModelPrompt: string
   autoTranslateWithSpace: boolean
   showTranslateConfirm: boolean
@@ -336,7 +335,6 @@ export const initialState: SettingsState = {
   webdavMaxBackups: 0,
   webdavSkipBackupFile: false,
   webdavDisableStream: false,
-  webdavAutoRestoreOnStartup: false,
   translateModelPrompt: TRANSLATE_PROMPT,
   autoTranslateWithSpace: false,
   showTranslateConfirm: true,
@@ -592,9 +590,6 @@ const settingsSlice = createSlice({
     },
     setWebdavDisableStream: (state, action: PayloadAction<boolean>) => {
       state.webdavDisableStream = action.payload
-    },
-    setWebdavAutoRestoreOnStartup: (state, action: PayloadAction<boolean>) => {
-      state.webdavAutoRestoreOnStartup = action.payload
     },
     setCodeExecution: (state, action: PayloadAction<{ enabled?: boolean; timeoutMinutes?: number }>) => {
       if (action.payload.enabled !== undefined) {
@@ -955,7 +950,6 @@ export const {
   setWebdavMaxBackups,
   setWebdavSkipBackupFile,
   setWebdavDisableStream,
-  setWebdavAutoRestoreOnStartup,
   setCodeExecution,
   setCodeEditor,
   setCodeViewer,

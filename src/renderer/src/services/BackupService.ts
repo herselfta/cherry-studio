@@ -212,7 +212,6 @@ export async function backupToWebdav({
         channel: 'system'
       })
       showMessage && window.toast.success(i18n.t('message.backup.success'))
-      recordBackupTimestamp()
 
       // 清理旧备份文件
       if (webdavMaxBackups > 0) {
@@ -1087,94 +1086,5 @@ export async function restoreFromLocal(fileName: string) {
     logger.error('[LocalBackup] Restore failed:', error as Error)
     window.toast.error(i18n.t('error.backup.file_format'))
     throw error
-  }
-}
-
-const LAST_BACKUP_TIMESTAMP_KEY = 'cherry-studio-last-backup-timestamp'
-
-/**
- * Record the current backup timestamp in localStorage.
- * Called after a successful WebDAV backup so we know when local data was last pushed.
- */
-export function recordBackupTimestamp() {
-  localStorage.setItem(LAST_BACKUP_TIMESTAMP_KEY, String(Date.now()))
-}
-
-/**
- * Auto-restore from WebDAV on startup if remote backup is newer than local data.
- *
- * Logic:
- * 1. Check if webdavAutoRestoreOnStartup is enabled and WebDAV is configured
- * 2. List all backup files on WebDAV
- * 3. Compare the newest remote backup's modified time with the local backup timestamp
- * 4. If remote is newer → download and restore automatically, then relaunch
- */
-export async function autoRestoreFromWebdavIfNeeded(): Promise<boolean> {
-  const {
-    webdavHost,
-    webdavUser,
-    webdavPass,
-    webdavPath,
-    webdavAutoRestoreOnStartup
-  } = store.getState().settings
-
-  if (!webdavAutoRestoreOnStartup || !webdavHost) {
-    return false
-  }
-
-  logger.info('[AutoRestore] Checking WebDAV for newer backup...')
-
-  try {
-    // 1. List remote backup files
-    const files = await window.api.backup.listWebdavFiles({
-      webdavHost,
-      webdavUser,
-      webdavPass,
-      webdavPath
-    })
-
-    if (!files || files.length === 0) {
-      logger.info('[AutoRestore] No backup files found on WebDAV')
-      return false
-    }
-
-    // files are already sorted by modifiedTime desc (newest first)
-    const newestRemote = files[0]
-    const remoteTime = new Date(newestRemote.modifiedTime).getTime()
-
-    // 2. Get local backup timestamp
-    const localTimestampStr = localStorage.getItem(LAST_BACKUP_TIMESTAMP_KEY)
-    const localTime = localTimestampStr ? parseInt(localTimestampStr, 10) : 0
-
-    logger.info(
-      `[AutoRestore] Remote newest: ${newestRemote.fileName} (${new Date(remoteTime).toISOString()}), ` +
-      `Local last backup: ${localTime ? new Date(localTime).toISOString() : 'never'}`
-    )
-
-    // 3. Compare: if remote is newer, restore
-    if (remoteTime > localTime) {
-      logger.info(`[AutoRestore] Remote backup is newer, auto-restoring: ${newestRemote.fileName}`)
-
-      const data = await window.api.backup.restoreFromWebdav({
-        webdavHost,
-        webdavUser,
-        webdavPass,
-        webdavPath,
-        fileName: newestRemote.fileName
-      })
-
-      // Update local timestamp to match what we just restored
-      localStorage.setItem(LAST_BACKUP_TIMESTAMP_KEY, String(remoteTime))
-
-      await handleData(JSON.parse(data))
-      // handleData will call relaunchApp(), so we won't reach here
-      return true
-    }
-
-    logger.info('[AutoRestore] Local data is up-to-date, no restore needed')
-    return false
-  } catch (error) {
-    logger.error('[AutoRestore] Failed to auto-restore from WebDAV:', error as Error)
-    return false
   }
 }

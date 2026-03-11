@@ -4083,10 +4083,6 @@
           "label": "自动备份",
           "off": "关闭"
         },
-        "autoRestoreOnStartup": {
-          "title": "启动时自动恢复",
-          "help": "启动时检查 WebDAV 上是否有更新的备份，如果有则自动恢复。适用于多设备同步场景，确保每次打开时数据是最新的。"
-        },
         "backup": {
           "button": "备份到 WebDAV",
           "manager": {
