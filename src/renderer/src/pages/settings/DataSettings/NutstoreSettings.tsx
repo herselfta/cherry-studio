@@ -1,4 +1,4 @@
-import { CheckOutlined, FolderOutlined, LoadingOutlined, SyncOutlined, WarningOutlined } from '@ant-design/icons'
+import { CheckOutlined, FolderOutlined, LoadingOutlined } from '@ant-design/icons'
 import { HStack } from '@renderer/components/Layout'
 import NutstorePathPopup from '@renderer/components/Popups/NutsorePathPopup'
 import Selector from '@renderer/components/Selector'
@@ -26,14 +26,20 @@ import {
 } from '@renderer/store/nutstore'
 import { modalConfirm } from '@renderer/utils'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
-import { Button, Input, Switch, Tooltip, Typography } from 'antd'
-import dayjs from 'dayjs'
+import { Button, Input, Switch, Typography } from 'antd'
 import type { FC } from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { type FileStat } from 'webdav'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
+import {
+  AutoSyncDescription,
+  AutoSyncStatusValue,
+  DEFAULT_AUTO_SYNC_INTERVAL,
+  getAutoSyncIntervalOptions,
+  getAutoSyncIntervalValue
+} from './AutoSyncSettings'
 
 const NutstoreSettings: FC = () => {
   const { theme } = useTheme()
@@ -128,13 +134,23 @@ const NutstoreSettings: FC = () => {
   const onSyncIntervalChange = (value: number) => {
     setSyncInterval(value)
     dispatch(setNutstoreSyncInterval(value))
-    if (value === 0) {
-      dispatch(setNutstoreAutoSync(false))
-      stopNutstoreAutoSync()
-    } else {
-      dispatch(setNutstoreAutoSync(true))
+    if (nutstoreAutoSync) {
       startNutstoreAutoSync()
     }
+  }
+
+  const onAutoSyncToggle = (checked: boolean) => {
+    if (!checked) {
+      dispatch(setNutstoreAutoSync(false))
+      stopNutstoreAutoSync()
+      return
+    }
+
+    const nextInterval = syncInterval > 0 ? syncInterval : DEFAULT_AUTO_SYNC_INTERVAL
+    setSyncInterval(nextInterval)
+    dispatch(setNutstoreSyncInterval(nextInterval))
+    dispatch(setNutstoreAutoSync(true))
+    startNutstoreAutoSync()
   }
 
   const onSkipBackupFilesChange = (value: boolean) => {
@@ -177,30 +193,6 @@ const NutstoreSettings: FC = () => {
     dispatch(setNutstorePath(targetPath))
   }
 
-  const renderSyncStatus = () => {
-    if (!nutstoreToken) return null
-
-    if (!nutstoreSyncState.lastSyncTime && !nutstoreSyncState.syncing && !nutstoreSyncState.lastSyncError) {
-      return <span style={{ color: 'var(--text-secondary)' }}>{t('settings.data.webdav.noSync')}</span>
-    }
-
-    return (
-      <HStack gap="5px" alignItems="center">
-        {nutstoreSyncState.syncing && <SyncOutlined spin />}
-        {!nutstoreSyncState.syncing && nutstoreSyncState.lastSyncError && (
-          <Tooltip title={`${t('settings.data.webdav.syncError')}: ${nutstoreSyncState.lastSyncError}`}>
-            <WarningOutlined style={{ color: 'red' }} />
-          </Tooltip>
-        )}
-        {nutstoreSyncState.lastSyncTime && (
-          <span style={{ color: 'var(--text-secondary)' }}>
-            {t('settings.data.webdav.lastSync')}: {dayjs(nutstoreSyncState.lastSyncTime).format('HH:mm:ss')}
-          </span>
-        )}
-      </HStack>
-    )
-  }
-
   const isLogin = nutstoreToken && nutstoreUsername
 
   const showBackupManager = () => {
@@ -210,6 +202,9 @@ const NutstoreSettings: FC = () => {
   const closeBackupManager = () => {
     setBackupManagerVisible(false)
   }
+
+  const isSyncConfigured = Boolean(nutstoreToken && storagePath)
+  const isAutoSyncEnabled = Boolean(nutstoreAutoSync && syncInterval > 0)
 
   return (
     <SettingGroup theme={theme}>
@@ -270,7 +265,7 @@ const NutstoreSettings: FC = () => {
           </SettingRow>
           <SettingDivider />
           <SettingRow>
-            <SettingRowTitle>{t('settings.general.backup.title')}</SettingRowTitle>
+            <SettingRowTitle>{t('settings.data.auto_sync.manual.label')}</SettingRowTitle>
             <HStack gap="5px" justifyContent="space-between">
               <Button onClick={showBackupModal} loading={backuping}>
                 {t('settings.data.nutstore.backup.button')}
@@ -280,33 +275,35 @@ const NutstoreSettings: FC = () => {
               </Button>
             </HStack>
           </SettingRow>
+          <SettingRow>
+            <SettingHelpText>{t('settings.data.auto_sync.manual.help')}</SettingHelpText>
+          </SettingRow>
           <SettingDivider />
           <SettingRow>
-            <SettingRowTitle>{t('settings.data.webdav.autoSync.label')}</SettingRowTitle>
+            <SettingRowTitle>{t('settings.data.auto_sync.label')}</SettingRowTitle>
+            <Switch checked={isAutoSyncEnabled} onChange={onAutoSyncToggle} disabled={!isSyncConfigured} />
+          </SettingRow>
+          <SettingDivider />
+          <SettingRow>
+            <SettingRowTitle>{t('settings.data.auto_sync.interval.label')}</SettingRowTitle>
             <Selector
               size={14}
-              value={syncInterval}
+              value={getAutoSyncIntervalValue(syncInterval)}
               onChange={onSyncIntervalChange}
-              options={[
-                { label: t('settings.data.webdav.autoSync.off'), value: 0 },
-                { label: t('settings.data.webdav.minute_interval', { count: 1 }), value: 1 },
-                { label: t('settings.data.webdav.minute_interval', { count: 5 }), value: 5 },
-                { label: t('settings.data.webdav.minute_interval', { count: 15 }), value: 15 },
-                { label: t('settings.data.webdav.minute_interval', { count: 30 }), value: 30 },
-                { label: t('settings.data.webdav.hour_interval', { count: 1 }), value: 60 },
-                { label: t('settings.data.webdav.hour_interval', { count: 2 }), value: 120 },
-                { label: t('settings.data.webdav.hour_interval', { count: 6 }), value: 360 },
-                { label: t('settings.data.webdav.hour_interval', { count: 12 }), value: 720 },
-                { label: t('settings.data.webdav.hour_interval', { count: 24 }), value: 1440 }
-              ]}
+              placeholder={t('settings.data.auto_sync.interval.placeholder')}
+              disabled={!isSyncConfigured}
+              options={getAutoSyncIntervalOptions(t)}
             />
           </SettingRow>
-          {nutstoreAutoSync && syncInterval > 0 && (
+          <SettingRow>
+            <AutoSyncDescription isConfigured={isSyncConfigured} />
+          </SettingRow>
+          {isAutoSyncEnabled && (
             <>
               <SettingDivider />
               <SettingRow>
-                <SettingRowTitle>{t('settings.data.webdav.syncStatus')}</SettingRowTitle>
-                {renderSyncStatus()}
+                <SettingRowTitle>{t('settings.data.auto_sync.status.label')}</SettingRowTitle>
+                <AutoSyncStatusValue isConfigured={isSyncConfigured} syncState={nutstoreSyncState} />
               </SettingRow>
             </>
           )}

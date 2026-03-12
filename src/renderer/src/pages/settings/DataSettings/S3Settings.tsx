@@ -1,4 +1,4 @@
-import { FolderOpenOutlined, InfoCircleOutlined, SaveOutlined, SyncOutlined, WarningOutlined } from '@ant-design/icons'
+import { FolderOpenOutlined, InfoCircleOutlined, SaveOutlined } from '@ant-design/icons'
 import { HStack } from '@renderer/components/Layout'
 import { S3BackupManager } from '@renderer/components/S3BackupManager'
 import { S3BackupModal, useS3BackupModal } from '@renderer/components/S3Modals'
@@ -12,12 +12,18 @@ import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { setS3Partial } from '@renderer/store/settings'
 import type { S3Config } from '@renderer/types'
 import { Button, Input, Switch, Tooltip } from 'antd'
-import dayjs from 'dayjs'
 import type { FC } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
+import {
+  AutoSyncDescription,
+  AutoSyncStatusValue,
+  DEFAULT_AUTO_SYNC_INTERVAL,
+  getAutoSyncIntervalOptions,
+  getAutoSyncIntervalValue
+} from './AutoSyncSettings'
 
 const S3Settings: FC = () => {
   const { s3 = {} as S3Config } = useSettings()
@@ -29,6 +35,7 @@ const S3Settings: FC = () => {
     accessKeyId: s3AccessKeyIdInit = '',
     secretAccessKey: s3SecretAccessKeyInit = '',
     root: s3RootInit = '',
+    autoSync: s3AutoSyncInit = false,
     syncInterval: s3SyncIntervalInit = 0,
     maxBackups: s3MaxBackupsInit = 5,
     skipBackupFile: s3SkipBackupFileInit = false
@@ -55,12 +62,23 @@ const S3Settings: FC = () => {
 
   const onSyncIntervalChange = (value: number) => {
     setSyncInterval(value)
-    dispatch(setS3Partial({ syncInterval: value, autoSync: value !== 0 }))
-    if (value === 0) {
-      stopAutoSync('s3')
-    } else {
+    dispatch(setS3Partial({ syncInterval: value }))
+    if (s3AutoSyncInit) {
       startAutoSync(false, 's3')
     }
+  }
+
+  const onAutoSyncToggle = (checked: boolean) => {
+    if (!checked) {
+      dispatch(setS3Partial({ autoSync: false }))
+      stopAutoSync('s3')
+      return
+    }
+
+    const nextInterval = syncInterval > 0 ? syncInterval : DEFAULT_AUTO_SYNC_INTERVAL
+    setSyncInterval(nextInterval)
+    dispatch(setS3Partial({ autoSync: true, syncInterval: nextInterval }))
+    startAutoSync(false, 's3')
   }
 
   const handleTitleClick = () => {
@@ -82,30 +100,6 @@ const S3Settings: FC = () => {
     dispatch(setS3Partial({ skipBackupFile: value }))
   }
 
-  const renderSyncStatus = () => {
-    if (!endpoint) return null
-
-    if (!s3Sync?.lastSyncTime && !s3Sync?.syncing && !s3Sync?.lastSyncError) {
-      return <span style={{ color: 'var(--text-secondary)' }}>{t('settings.data.s3.syncStatus.noSync')}</span>
-    }
-
-    return (
-      <HStack gap="5px" alignItems="center">
-        {s3Sync?.syncing && <SyncOutlined spin />}
-        {!s3Sync?.syncing && s3Sync?.lastSyncError && (
-          <Tooltip title={t('settings.data.s3.syncStatus.error', { message: s3Sync.lastSyncError })}>
-            <WarningOutlined style={{ color: 'red' }} />
-          </Tooltip>
-        )}
-        {s3Sync?.lastSyncTime && (
-          <span style={{ color: 'var(--text-secondary)' }}>
-            {t('settings.data.s3.syncStatus.lastSync', { time: dayjs(s3Sync.lastSyncTime).format('HH:mm:ss') })}
-          </span>
-        )}
-      </HStack>
-    )
-  }
-
   const { isModalVisible, handleBackup, handleCancel, backuping, customFileName, setCustomFileName, showBackupModal } =
     useS3BackupModal()
 
@@ -116,6 +110,9 @@ const S3Settings: FC = () => {
   const closeBackupManager = () => {
     setBackupManagerVisible(false)
   }
+
+  const isSyncConfigured = Boolean(endpoint && region && bucket && accessKeyId && secretAccessKey)
+  const isAutoSyncEnabled = Boolean(s3AutoSyncInit && syncInterval > 0)
 
   return (
     <SettingGroup theme={theme}>
@@ -195,7 +192,7 @@ const S3Settings: FC = () => {
       </SettingRow>
       <SettingDivider />
       <SettingRow>
-        <SettingRowTitle>{t('settings.data.s3.backup.operation')}</SettingRowTitle>
+        <SettingRowTitle>{t('settings.data.auto_sync.manual.label')}</SettingRowTitle>
         <HStack gap="5px" justifyContent="space-between">
           <Button
             onClick={showBackupModal}
@@ -212,27 +209,28 @@ const S3Settings: FC = () => {
           </Button>
         </HStack>
       </SettingRow>
+      <SettingRow>
+        <SettingHelpText>{t('settings.data.auto_sync.manual.help')}</SettingHelpText>
+      </SettingRow>
       <SettingDivider />
       <SettingRow>
-        <SettingRowTitle>{t('settings.data.s3.autoSync.label')}</SettingRowTitle>
+        <SettingRowTitle>{t('settings.data.auto_sync.label')}</SettingRowTitle>
+        <Switch checked={isAutoSyncEnabled} onChange={onAutoSyncToggle} disabled={!isSyncConfigured} />
+      </SettingRow>
+      <SettingDivider />
+      <SettingRow>
+        <SettingRowTitle>{t('settings.data.auto_sync.interval.label')}</SettingRowTitle>
         <Selector
           size={14}
-          value={syncInterval}
+          value={getAutoSyncIntervalValue(syncInterval)}
           onChange={onSyncIntervalChange}
-          disabled={!endpoint || !accessKeyId || !secretAccessKey}
-          options={[
-            { label: t('settings.data.s3.autoSync.off'), value: 0 },
-            { label: t('settings.data.s3.autoSync.minute', { count: 1 }), value: 1 },
-            { label: t('settings.data.s3.autoSync.minute', { count: 5 }), value: 5 },
-            { label: t('settings.data.s3.autoSync.minute', { count: 15 }), value: 15 },
-            { label: t('settings.data.s3.autoSync.minute', { count: 30 }), value: 30 },
-            { label: t('settings.data.s3.autoSync.hour', { count: 1 }), value: 60 },
-            { label: t('settings.data.s3.autoSync.hour', { count: 2 }), value: 120 },
-            { label: t('settings.data.s3.autoSync.hour', { count: 6 }), value: 360 },
-            { label: t('settings.data.s3.autoSync.hour', { count: 12 }), value: 720 },
-            { label: t('settings.data.s3.autoSync.hour', { count: 24 }), value: 1440 }
-          ]}
+          placeholder={t('settings.data.auto_sync.interval.placeholder')}
+          disabled={!isSyncConfigured}
+          options={getAutoSyncIntervalOptions(t)}
         />
+      </SettingRow>
+      <SettingRow>
+        <AutoSyncDescription isConfigured={isSyncConfigured} />
       </SettingRow>
       <SettingDivider />
       <SettingRow>
@@ -261,12 +259,12 @@ const S3Settings: FC = () => {
       <SettingRow>
         <SettingHelpText>{t('settings.data.s3.skipBackupFile.help')}</SettingHelpText>
       </SettingRow>
-      {syncInterval > 0 && (
+      {isAutoSyncEnabled && (
         <>
           <SettingDivider />
           <SettingRow>
-            <SettingRowTitle>{t('settings.data.s3.syncStatus.label')}</SettingRowTitle>
-            {renderSyncStatus()}
+            <SettingRowTitle>{t('settings.data.auto_sync.status.label')}</SettingRowTitle>
+            <AutoSyncStatusValue isConfigured={isSyncConfigured} syncState={s3Sync} />
           </SettingRow>
         </>
       )}

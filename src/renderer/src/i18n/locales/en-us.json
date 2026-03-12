@@ -3614,6 +3614,35 @@
         "button": "Open Logs",
         "label": "App Logs"
       },
+      "auto_sync": {
+        "help": "Checks local and remote changes on the selected interval. Local changes are pushed automatically, remote changes are pulled and restored locally. If both sides change, syncing pauses and asks you to resolve the conflict.",
+        "interval": {
+          "hour_one": "Every {{count}} hour",
+          "hour_other": "Every {{count}} hours",
+          "label": "Check Interval",
+          "minute_one": "Every {{count}} minute",
+          "minute_other": "Every {{count}} minutes",
+          "placeholder": "Select interval"
+        },
+        "label": "Automatic Sync",
+        "manual": {
+          "help": "Create snapshots on demand or restore from a previous snapshot when needed.",
+          "label": "Manual Backup & Restore"
+        },
+        "messages": {
+          "conflict": "A sync conflict was detected because local and remote data changed at the same time. Resolve the conflict before syncing again.",
+          "failed": "Automatic sync failed"
+        },
+        "requiresSetup": "Complete this storage configuration to enable automatic sync.",
+        "status": {
+          "error": "Sync Issue",
+          "label": "Sync Status",
+          "lastSync": "Last sync: {{time}}",
+          "pending": "Enabled, waiting for the first sync",
+          "syncing": "Syncing",
+          "unavailable": "Finish setup to view sync status"
+        }
+      },
       "backup": {
         "skip_file_data_help": "Skip backing up data files such as pictures and knowledge bases during backup, and only back up chat records and settings. Reduce space occupancy and speed up the backup speed.",
         "skip_file_data_title": "Slim Backup"
@@ -3792,12 +3821,12 @@
           }
         },
         "directory": {
-          "label": "Local Backup Directory",
-          "placeholder": "Select a directory for local backups",
+          "label": "Local Sync Directory",
+          "placeholder": "Select a directory for local sync",
           "select_error_app_data_path": "New path cannot be the same as the application data path",
           "select_error_in_app_install_path": "New path cannot be the same as the application installation path",
           "select_error_write_permission": "New path does not have write permission",
-          "select_title": "Select Backup Directory"
+          "select_title": "Select Sync Directory"
         },
         "hour_interval_one": "{{count}} hour",
         "hour_interval_other": "{{count}} hours",
@@ -3818,7 +3847,7 @@
         },
         "syncError": "Backup Error",
         "syncStatus": "Backup Status",
-        "title": "Local Backup"
+        "title": "Local Directory"
       },
       "markdown_export": {
         "exclude_citations": {
@@ -4039,7 +4068,7 @@
           "success": "Data restore successful"
         },
         "root": {
-          "label": "Backup Directory (Optional)",
+          "label": "Sync Directory (Optional)",
           "placeholder": "e.g: /cherry-studio"
         },
         "secretAccessKey": {

@@ -696,7 +696,7 @@ export function startAutoSync(immediate = false, type?: BackupType) {
           })
           logger.info(`${logPrefix} Pulled remote changes and restored local data`)
         } else if (action === 'conflict') {
-          const conflictMessage = 'Sync conflict detected. Resolve local or remote changes manually before retrying.'
+          const conflictMessage = i18n.t('settings.data.auto_sync.messages.conflict')
 
           setAutoSyncState(backupType, {
             lastSyncError: conflictMessage,
@@ -725,7 +725,7 @@ export function startAutoSync(immediate = false, type?: BackupType) {
           logger.error(`${logPrefix} Auto sync failed after all retries:`, error)
 
           setAutoSyncState(backupType, {
-            lastSyncError: 'Auto sync failed',
+            lastSyncError: i18n.t('settings.data.auto_sync.messages.failed'),
             lastSyncTime: Date.now(),
             syncing: false
           })

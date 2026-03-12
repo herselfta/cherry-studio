@@ -1,4 +1,4 @@
-import { DeleteOutlined, FolderOpenOutlined, SaveOutlined, SyncOutlined, WarningOutlined } from '@ant-design/icons'
+import { DeleteOutlined, FolderOpenOutlined, SaveOutlined } from '@ant-design/icons'
 import { loggerService } from '@logger'
 import { HStack } from '@renderer/components/Layout'
 import { LocalBackupManager } from '@renderer/components/LocalBackupManager'
@@ -16,12 +16,18 @@ import {
   setLocalBackupSyncInterval as _setLocalBackupSyncInterval
 } from '@renderer/store/settings'
 import type { AppInfo } from '@renderer/types'
-import { Button, Input, Switch, Tooltip } from 'antd'
-import dayjs from 'dayjs'
+import { Button, Input, Switch } from 'antd'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
+import {
+  AutoSyncDescription,
+  AutoSyncStatusValue,
+  DEFAULT_AUTO_SYNC_INTERVAL,
+  getAutoSyncIntervalOptions,
+  getAutoSyncIntervalValue
+} from './AutoSyncSettings'
 
 const logger = loggerService.withContext('LocalBackupSettings')
 
@@ -30,6 +36,7 @@ const LocalBackupSettings: React.FC = () => {
 
   const {
     localBackupDir: localBackupDirSetting,
+    localBackupAutoSync: localBackupAutoSyncSetting,
     localBackupSyncInterval: localBackupSyncIntervalSetting,
     localBackupMaxBackups: localBackupMaxBackupsSetting,
     localBackupSkipBackupFile: localBackupSkipBackupFileSetting
@@ -64,13 +71,23 @@ const LocalBackupSettings: React.FC = () => {
   const onSyncIntervalChange = (value: number) => {
     setSyncInterval(value)
     dispatch(_setLocalBackupSyncInterval(value))
-    if (value === 0) {
-      dispatch(setLocalBackupAutoSync(false))
-      stopAutoSync('local')
-    } else {
-      dispatch(setLocalBackupAutoSync(true))
+    if (localBackupAutoSyncSetting) {
       startAutoSync(false, 'local')
     }
+  }
+
+  const onAutoSyncToggle = (checked: boolean) => {
+    if (!checked) {
+      dispatch(setLocalBackupAutoSync(false))
+      stopAutoSync('local')
+      return
+    }
+
+    const nextInterval = syncInterval > 0 ? syncInterval : DEFAULT_AUTO_SYNC_INTERVAL
+    setSyncInterval(nextInterval)
+    dispatch(_setLocalBackupSyncInterval(nextInterval))
+    dispatch(setLocalBackupAutoSync(true))
+    startAutoSync(false, 'local')
   }
 
   const checkLocalBackupDirValid = async (dir: string) => {
@@ -119,8 +136,9 @@ const LocalBackupSettings: React.FC = () => {
       dispatch(_setLocalBackupDir(value))
       setResolvedLocalBackupDir(await window.api.resolvePath(value))
 
-      dispatch(setLocalBackupAutoSync(true))
-      startAutoSync(true, 'local')
+      if (localBackupAutoSyncSetting) {
+        startAutoSync(true, 'local')
+      }
       return
     }
 
@@ -164,30 +182,6 @@ const LocalBackupSettings: React.FC = () => {
     stopAutoSync('local')
   }
 
-  const renderSyncStatus = () => {
-    if (!localBackupDir) return null
-
-    if (!localBackupSync.lastSyncTime && !localBackupSync.syncing && !localBackupSync.lastSyncError) {
-      return <span style={{ color: 'var(--text-secondary)' }}>{t('settings.data.local.noSync')}</span>
-    }
-
-    return (
-      <HStack gap="5px" alignItems="center">
-        {localBackupSync.syncing && <SyncOutlined spin />}
-        {!localBackupSync.syncing && localBackupSync.lastSyncError && (
-          <Tooltip title={`${t('settings.data.local.syncError')}: ${localBackupSync.lastSyncError}`}>
-            <WarningOutlined style={{ color: 'red' }} />
-          </Tooltip>
-        )}
-        {localBackupSync.lastSyncTime && (
-          <span style={{ color: 'var(--text-secondary)' }}>
-            {t('settings.data.local.lastSync')}: {dayjs(localBackupSync.lastSyncTime).format('HH:mm:ss')}
-          </span>
-        )}
-      </HStack>
-    )
-  }
-
   const { isModalVisible, handleBackup, handleCancel, backuping, customFileName, setCustomFileName, showBackupModal } =
     useLocalBackupModal(resolvedLocalBackupDir)
 
@@ -198,6 +192,9 @@ const LocalBackupSettings: React.FC = () => {
   const closeBackupManager = () => {
     setBackupManagerVisible(false)
   }
+
+  const isSyncConfigured = Boolean(localBackupDir)
+  const isAutoSyncEnabled = Boolean(localBackupAutoSyncSetting && syncInterval > 0)
 
   return (
     <SettingGroup theme={theme}>
@@ -223,7 +220,7 @@ const LocalBackupSettings: React.FC = () => {
       </SettingRow>
       <SettingDivider />
       <SettingRow>
-        <SettingRowTitle>{t('settings.general.backup.title')}</SettingRowTitle>
+        <SettingRowTitle>{t('settings.data.auto_sync.manual.label')}</SettingRowTitle>
         <HStack gap="5px" justifyContent="space-between">
           <Button onClick={showBackupModal} icon={<SaveOutlined />} loading={backuping} disabled={!localBackupDir}>
             {t('settings.data.local.backup.button')}
@@ -233,27 +230,28 @@ const LocalBackupSettings: React.FC = () => {
           </Button>
         </HStack>
       </SettingRow>
+      <SettingRow>
+        <SettingHelpText>{t('settings.data.auto_sync.manual.help')}</SettingHelpText>
+      </SettingRow>
       <SettingDivider />
       <SettingRow>
-        <SettingRowTitle>{t('settings.data.local.autoSync.label')}</SettingRowTitle>
+        <SettingRowTitle>{t('settings.data.auto_sync.label')}</SettingRowTitle>
+        <Switch checked={isAutoSyncEnabled} onChange={onAutoSyncToggle} disabled={!isSyncConfigured} />
+      </SettingRow>
+      <SettingDivider />
+      <SettingRow>
+        <SettingRowTitle>{t('settings.data.auto_sync.interval.label')}</SettingRowTitle>
         <Selector
           size={14}
-          value={syncInterval}
+          value={getAutoSyncIntervalValue(syncInterval)}
           onChange={onSyncIntervalChange}
-          disabled={!localBackupDir}
-          options={[
-            { label: t('settings.data.local.autoSync.off'), value: 0 },
-            { label: t('settings.data.local.minute_interval', { count: 1 }), value: 1 },
-            { label: t('settings.data.local.minute_interval', { count: 5 }), value: 5 },
-            { label: t('settings.data.local.minute_interval', { count: 15 }), value: 15 },
-            { label: t('settings.data.local.minute_interval', { count: 30 }), value: 30 },
-            { label: t('settings.data.local.hour_interval', { count: 1 }), value: 60 },
-            { label: t('settings.data.local.hour_interval', { count: 2 }), value: 120 },
-            { label: t('settings.data.local.hour_interval', { count: 6 }), value: 360 },
-            { label: t('settings.data.local.hour_interval', { count: 12 }), value: 720 },
-            { label: t('settings.data.local.hour_interval', { count: 24 }), value: 1440 }
-          ]}
+          placeholder={t('settings.data.auto_sync.interval.placeholder')}
+          disabled={!isSyncConfigured}
+          options={getAutoSyncIntervalOptions(t)}
         />
+      </SettingRow>
+      <SettingRow>
+        <AutoSyncDescription isConfigured={isSyncConfigured} />
       </SettingRow>
       <SettingDivider />
       <SettingRow>
@@ -282,12 +280,12 @@ const LocalBackupSettings: React.FC = () => {
       <SettingRow>
         <SettingHelpText>{t('settings.data.backup.skip_file_data_help')}</SettingHelpText>
       </SettingRow>
-      {localBackupSync && syncInterval > 0 && (
+      {isAutoSyncEnabled && (
         <>
           <SettingDivider />
           <SettingRow>
-            <SettingRowTitle>{t('settings.data.local.syncStatus')}</SettingRowTitle>
-            {renderSyncStatus()}
+            <SettingRowTitle>{t('settings.data.auto_sync.status.label')}</SettingRowTitle>
+            <AutoSyncStatusValue isConfigured={isSyncConfigured} syncState={localBackupSync} />
           </SettingRow>
         </>
       )}

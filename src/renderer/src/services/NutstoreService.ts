@@ -357,7 +357,7 @@ async function performAutoSync() {
         store.dispatch(setNutstoreSyncState({ lastSyncError: null, lastSyncTime: Date.now(), syncing: false }))
         logger.info('[Nutstore AutoSync] Pulled remote changes and restored local data')
       } else if (action === 'conflict') {
-        const conflictMessage = 'Sync conflict detected. Resolve local or remote changes manually before retrying.'
+        const conflictMessage = i18n.t('settings.data.auto_sync.messages.conflict')
 
         store.dispatch(setNutstoreSyncState({ lastSyncError: conflictMessage, syncing: false }))
         logger.warn(`[Nutstore AutoSync] ${conflictMessage}`)
@@ -380,7 +380,7 @@ async function performAutoSync() {
         logger.error('[Nutstore AutoSync] Auto sync failed after all retries:', error as Error)
         store.dispatch(
           setNutstoreSyncState({
-            lastSyncError: 'Auto sync failed',
+            lastSyncError: i18n.t('settings.data.auto_sync.messages.failed'),
             lastSyncTime: Date.now(),
             syncing: false
           })

@@ -3614,6 +3614,35 @@
         "button": "Abrir registros",
         "label": "Registros de la aplicación"
       },
+      "auto_sync": {
+        "help": "[to be translated]:Checks local and remote changes on the selected interval. Local changes are pushed automatically, remote changes are pulled and restored locally. If both sides change, syncing pauses and asks you to resolve the conflict.",
+        "interval": {
+          "hour_one": "[to be translated]:Every {{count}} hour",
+          "hour_other": "[to be translated]:Every {{count}} hours",
+          "label": "[to be translated]:Check Interval",
+          "minute_one": "[to be translated]:Every {{count}} minute",
+          "minute_other": "[to be translated]:Every {{count}} minutes",
+          "placeholder": "[to be translated]:Select interval"
+        },
+        "label": "[to be translated]:Automatic Sync",
+        "manual": {
+          "help": "[to be translated]:Create snapshots on demand or restore from a previous snapshot when needed.",
+          "label": "[to be translated]:Manual Backup & Restore"
+        },
+        "messages": {
+          "conflict": "[to be translated]:A sync conflict was detected because local and remote data changed at the same time. Resolve the conflict before syncing again.",
+          "failed": "[to be translated]:Automatic sync failed"
+        },
+        "requiresSetup": "[to be translated]:Complete this storage configuration to enable automatic sync.",
+        "status": {
+          "error": "[to be translated]:Sync Issue",
+          "label": "[to be translated]:Sync Status",
+          "lastSync": "[to be translated]:Last sync: {{time}}",
+          "pending": "[to be translated]:Enabled, waiting for the first sync",
+          "syncing": "[to be translated]:Syncing",
+          "unavailable": "[to be translated]:Finish setup to view sync status"
+        }
+      },
       "backup": {
         "skip_file_data_help": "Omitir la copia de seguridad de archivos de datos como imágenes y bases de conocimiento durante la copia de seguridad, respaldando únicamente historial de chat y configuraciones. Reduce el uso de espacio y acelera el proceso de copia de seguridad",
         "skip_file_data_title": "Copia de seguridad reducida"

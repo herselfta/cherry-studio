@@ -7,7 +7,9 @@
         "invalid_agent": "Agent invalid"
       },
       "model": {
-        "tooltip": "Momentan, doar modelele care acceptă endpoint-uri Anthropic sunt disponibile pentru funcția Agent."
+        "supported_providers": "[to be translated]:Supported Providers",
+        "tooltip": "Momentan, doar modelele care acceptă endpoint-uri Anthropic sunt disponibile pentru funcția Agent.",
+        "view_providers": "[to be translated]:View supported providers"
       },
       "title": "Adaugă agent",
       "type": {
@@ -3612,6 +3614,35 @@
         "button": "Deschide jurnalele",
         "label": "Jurnale aplicație"
       },
+      "auto_sync": {
+        "help": "[to be translated]:Checks local and remote changes on the selected interval. Local changes are pushed automatically, remote changes are pulled and restored locally. If both sides change, syncing pauses and asks you to resolve the conflict.",
+        "interval": {
+          "hour_one": "[to be translated]:Every {{count}} hour",
+          "hour_other": "[to be translated]:Every {{count}} hours",
+          "label": "[to be translated]:Check Interval",
+          "minute_one": "[to be translated]:Every {{count}} minute",
+          "minute_other": "[to be translated]:Every {{count}} minutes",
+          "placeholder": "[to be translated]:Select interval"
+        },
+        "label": "[to be translated]:Automatic Sync",
+        "manual": {
+          "help": "[to be translated]:Create snapshots on demand or restore from a previous snapshot when needed.",
+          "label": "[to be translated]:Manual Backup & Restore"
+        },
+        "messages": {
+          "conflict": "[to be translated]:A sync conflict was detected because local and remote data changed at the same time. Resolve the conflict before syncing again.",
+          "failed": "[to be translated]:Automatic sync failed"
+        },
+        "requiresSetup": "[to be translated]:Complete this storage configuration to enable automatic sync.",
+        "status": {
+          "error": "[to be translated]:Sync Issue",
+          "label": "[to be translated]:Sync Status",
+          "lastSync": "[to be translated]:Last sync: {{time}}",
+          "pending": "[to be translated]:Enabled, waiting for the first sync",
+          "syncing": "[to be translated]:Syncing",
+          "unavailable": "[to be translated]:Finish setup to view sync status"
+        }
+      },
       "backup": {
         "skip_file_data_help": "Omite salvarea fișierelor de date precum imagini și baze de cunoștințe în timpul backup-ului și salvează doar înregistrările de chat și setările. Reduce ocuparea spațiului și accelerează viteza de backup.",
         "skip_file_data_title": "Backup simplificat"
@@ -5028,6 +5059,11 @@
       },
       "docs_check": "Verifică",
       "docs_more_details": "pentru mai multe detalii",
+      "filter": {
+        "agent": "[to be translated]:Agent Supported",
+        "all": "[to be translated]:All Providers"
+      },
+      "filter_agent": "[to be translated]:Filter Agent Supported Providers",
       "get_api_key": "Obține cheie API",
       "misc": "Altele",
       "no_models_for_check": "Nu există modele disponibile pentru verificare (de ex. modele chat)",

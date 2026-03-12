@@ -3614,6 +3614,35 @@
         "button": "開啟日誌",
         "label": "應用程式日誌"
       },
+      "auto_sync": {
+        "help": "按設定間隔檢查本機與遠端變更。本機有更新會自動上傳到遠端，遠端有更新會自動拉取並恢復到本機；如果兩邊同時變化，會暫停並提示衝突。",
+        "interval": {
+          "hour_one": "每 {{count}} 小時",
+          "hour_other": "每 {{count}} 小時",
+          "label": "檢查間隔",
+          "minute_one": "每 {{count}} 分鐘",
+          "minute_other": "每 {{count}} 分鐘",
+          "placeholder": "選擇間隔"
+        },
+        "label": "自動同步",
+        "manual": {
+          "help": "需要時手動建立歷史快照或從歷史快照恢復資料。",
+          "label": "手動備份與恢復"
+        },
+        "messages": {
+          "conflict": "檢測到本機和遠端同時發生變更，請先處理衝突後再繼續同步。",
+          "failed": "自動同步失敗"
+        },
+        "requiresSetup": "完成目前儲存配置後即可開啟自動同步。",
+        "status": {
+          "error": "同步異常",
+          "label": "同步狀態",
+          "lastSync": "上次同步：{{time}}",
+          "pending": "已開啟，等待首次同步",
+          "syncing": "正在同步",
+          "unavailable": "完成配置後可查看同步狀態"
+        }
+      },
       "backup": {
         "skip_file_data_help": "備份時跳過圖片、知識庫等資料檔案，只備份聊天記錄與設定。可減少空間佔用並加快備份速度",
         "skip_file_data_title": "精簡備份"
@@ -3792,12 +3821,12 @@
           }
         },
         "directory": {
-          "label": "備份目錄",
-          "placeholder": "請選擇備份目錄",
+          "label": "同步目錄",
+          "placeholder": "請選擇同步目錄",
           "select_error_app_data_path": "新路徑不能與應用程式資料路徑相同",
           "select_error_in_app_install_path": "新路徑不能與應用安裝路徑相同",
           "select_error_write_permission": "新路徑沒有寫入權限",
-          "select_title": "選擇備份目錄"
+          "select_title": "選擇同步目錄"
         },
         "hour_interval_one": "{{count}} 小時",
         "hour_interval_other": "{{count}} 小時",
@@ -3818,7 +3847,7 @@
         },
         "syncError": "備份錯誤",
         "syncStatus": "備份狀態",
-        "title": "本機備份"
+        "title": "本機目錄"
       },
       "markdown_export": {
         "exclude_citations": {
@@ -4039,7 +4068,7 @@
           "success": "資料恢復成功"
         },
         "root": {
-          "label": "備份目錄（可選）",
+          "label": "同步目錄（可選）",
           "placeholder": "例如：/cherry-studio"
         },
         "secretAccessKey": {

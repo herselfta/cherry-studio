@@ -1,4 +1,4 @@
-import { FolderOpenOutlined, SaveOutlined, SyncOutlined, WarningOutlined } from '@ant-design/icons'
+import { FolderOpenOutlined, SaveOutlined } from '@ant-design/icons'
 import { HStack } from '@renderer/components/Layout'
 import Selector from '@renderer/components/Selector'
 import { WebdavBackupManager } from '@renderer/components/WebdavBackupManager'
@@ -18,13 +18,19 @@ import {
   setWebdavSyncInterval as _setWebdavSyncInterval,
   setWebdavUser as _setWebdavUser
 } from '@renderer/store/settings'
-import { Button, Input, Switch, Tooltip } from 'antd'
-import dayjs from 'dayjs'
+import { Button, Input, Switch } from 'antd'
 import type { FC } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
+import {
+  AutoSyncDescription,
+  AutoSyncStatusValue,
+  DEFAULT_AUTO_SYNC_INTERVAL,
+  getAutoSyncIntervalOptions,
+  getAutoSyncIntervalValue
+} from './AutoSyncSettings'
 
 const WebDavSettings: FC = () => {
   const {
@@ -32,6 +38,7 @@ const WebDavSettings: FC = () => {
     webdavUser: webDAVUser,
     webdavPass: webDAVPass,
     webdavPath: webDAVPath,
+    webdavAutoSync,
     webdavSyncInterval: webDAVSyncInterval,
     webdavMaxBackups: webDAVMaxBackups,
     webdavSkipBackupFile: webdDAVSkipBackupFile,
@@ -56,18 +63,26 @@ const WebDavSettings: FC = () => {
 
   const { webdavSync } = useAppSelector((state) => state.backup)
 
-  // 把之前备份的文件定时上传到 webdav，首先先配置 webdav 的 host, port, user, pass, path
-
   const onSyncIntervalChange = (value: number) => {
     setSyncInterval(value)
     dispatch(_setWebdavSyncInterval(value))
-    if (value === 0) {
-      dispatch(setWebdavAutoSync(false))
-      stopAutoSync('webdav')
-    } else {
-      dispatch(setWebdavAutoSync(true))
+    if (webdavAutoSync) {
       startAutoSync(false, 'webdav')
     }
+  }
+
+  const onAutoSyncToggle = (checked: boolean) => {
+    if (!checked) {
+      dispatch(setWebdavAutoSync(false))
+      stopAutoSync('webdav')
+      return
+    }
+
+    const nextInterval = syncInterval > 0 ? syncInterval : DEFAULT_AUTO_SYNC_INTERVAL
+    setSyncInterval(nextInterval)
+    dispatch(_setWebdavSyncInterval(nextInterval))
+    dispatch(setWebdavAutoSync(true))
+    startAutoSync(false, 'webdav')
   }
 
   const onMaxBackupsChange = (value: number) => {
@@ -85,30 +100,6 @@ const WebDavSettings: FC = () => {
     dispatch(_setWebdavDisableStream(value))
   }
 
-  const renderSyncStatus = () => {
-    if (!webdavHost) return null
-
-    if (!webdavSync.lastSyncTime && !webdavSync.syncing && !webdavSync.lastSyncError) {
-      return <span style={{ color: 'var(--text-secondary)' }}>{t('settings.data.webdav.noSync')}</span>
-    }
-
-    return (
-      <HStack gap="5px" alignItems="center">
-        {webdavSync.syncing && <SyncOutlined spin />}
-        {!webdavSync.syncing && webdavSync.lastSyncError && (
-          <Tooltip title={`${t('settings.data.webdav.syncError')}: ${webdavSync.lastSyncError}`}>
-            <WarningOutlined style={{ color: 'red' }} />
-          </Tooltip>
-        )}
-        {webdavSync.lastSyncTime && (
-          <span style={{ color: 'var(--text-secondary)' }}>
-            {t('settings.data.webdav.lastSync')}: {dayjs(webdavSync.lastSyncTime).format('HH:mm:ss')}
-          </span>
-        )}
-      </HStack>
-    )
-  }
-
   const { isModalVisible, handleBackup, handleCancel, backuping, customFileName, setCustomFileName, showBackupModal } =
     useWebdavBackupModal()
 
@@ -119,6 +110,9 @@ const WebDavSettings: FC = () => {
   const closeBackupManager = () => {
     setBackupManagerVisible(false)
   }
+
+  const isSyncConfigured = Boolean(webdavHost)
+  const isAutoSyncEnabled = Boolean(webdavAutoSync && syncInterval > 0)
 
   return (
     <SettingGroup theme={theme}>
@@ -170,7 +164,7 @@ const WebDavSettings: FC = () => {
       </SettingRow>
       <SettingDivider />
       <SettingRow>
-        <SettingRowTitle>{t('settings.general.backup.title')}</SettingRowTitle>
+        <SettingRowTitle>{t('settings.data.auto_sync.manual.label')}</SettingRowTitle>
         <HStack gap="5px" justifyContent="space-between">
           <Button onClick={showBackupModal} icon={<SaveOutlined />} loading={backuping}>
             {t('settings.data.webdav.backup.button')}
@@ -180,27 +174,28 @@ const WebDavSettings: FC = () => {
           </Button>
         </HStack>
       </SettingRow>
+      <SettingRow>
+        <SettingHelpText>{t('settings.data.auto_sync.manual.help')}</SettingHelpText>
+      </SettingRow>
       <SettingDivider />
       <SettingRow>
-        <SettingRowTitle>{t('settings.data.webdav.autoSync.label')}</SettingRowTitle>
+        <SettingRowTitle>{t('settings.data.auto_sync.label')}</SettingRowTitle>
+        <Switch checked={isAutoSyncEnabled} onChange={onAutoSyncToggle} disabled={!isSyncConfigured} />
+      </SettingRow>
+      <SettingDivider />
+      <SettingRow>
+        <SettingRowTitle>{t('settings.data.auto_sync.interval.label')}</SettingRowTitle>
         <Selector
           size={14}
-          value={syncInterval}
+          value={getAutoSyncIntervalValue(syncInterval)}
           onChange={onSyncIntervalChange}
-          disabled={!webdavHost}
-          options={[
-            { label: t('settings.data.webdav.autoSync.off'), value: 0 },
-            { label: t('settings.data.webdav.minute_interval', { count: 1 }), value: 1 },
-            { label: t('settings.data.webdav.minute_interval', { count: 5 }), value: 5 },
-            { label: t('settings.data.webdav.minute_interval', { count: 15 }), value: 15 },
-            { label: t('settings.data.webdav.minute_interval', { count: 30 }), value: 30 },
-            { label: t('settings.data.webdav.hour_interval', { count: 1 }), value: 60 },
-            { label: t('settings.data.webdav.hour_interval', { count: 2 }), value: 120 },
-            { label: t('settings.data.webdav.hour_interval', { count: 6 }), value: 360 },
-            { label: t('settings.data.webdav.hour_interval', { count: 12 }), value: 720 },
-            { label: t('settings.data.webdav.hour_interval', { count: 24 }), value: 1440 }
-          ]}
+          placeholder={t('settings.data.auto_sync.interval.placeholder')}
+          disabled={!isSyncConfigured}
+          options={getAutoSyncIntervalOptions(t)}
         />
+      </SettingRow>
+      <SettingRow>
+        <AutoSyncDescription isConfigured={isSyncConfigured} />
       </SettingRow>
       <SettingDivider />
       <SettingRow>
@@ -237,12 +232,12 @@ const WebDavSettings: FC = () => {
       <SettingRow>
         <SettingHelpText>{t('settings.data.webdav.disableStream.help')}</SettingHelpText>
       </SettingRow>
-      {webdavSync && syncInterval > 0 && (
+      {isAutoSyncEnabled && (
         <>
           <SettingDivider />
           <SettingRow>
-            <SettingRowTitle>{t('settings.data.webdav.syncStatus')}</SettingRowTitle>
-            {renderSyncStatus()}
+            <SettingRowTitle>{t('settings.data.auto_sync.status.label')}</SettingRowTitle>
+            <AutoSyncStatusValue isConfigured={isSyncConfigured} syncState={webdavSync} />
           </SettingRow>
         </>
       )}
