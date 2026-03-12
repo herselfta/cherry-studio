@@ -43,6 +43,8 @@ stats.html
 .env
 .env.*
 !.env.example
+.env.production
+.build-cache
 
 # Local
 local
