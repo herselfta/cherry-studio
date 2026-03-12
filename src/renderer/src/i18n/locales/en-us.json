@@ -3849,6 +3849,39 @@
         "syncStatus": "Backup Status",
         "title": "Local Directory"
       },
+      "manual_schedule": {
+        "confirm_before_restore": {
+          "help": "When enabled, scheduled restores show a confirmation dialog with the latest backup target before any data is replaced. When disabled, restores start immediately.",
+          "label": "Confirm Before Restore"
+        },
+        "empty": "No times configured",
+        "help": "Uploads run every day at the selected times. Restores always pick the latest manual backup from the current storage.",
+        "providers": {
+          "local": "Local Directory",
+          "nutstore": "Nutstore",
+          "s3": "S3 Compatible Storage",
+          "webdav": "WebDAV"
+        },
+        "quick_actions": {
+          "restore": "Restore Backup",
+          "upload": "Upload Backup"
+        },
+        "requires_setup": "You can set daily times now. The schedule will start working after this storage is fully configured.",
+        "restore_confirm": {
+          "confirm": "Restore Now",
+          "content": "A scheduled task is ready to restore the latest backup from {{provider}}: {{fileName}}. Modified: {{modifiedTime}}. Size: {{size}} bytes. Confirming will overwrite your current data.",
+          "title": "Confirm Scheduled Restore"
+        },
+        "restore_times": {
+          "aria": "Scheduled restore times",
+          "help": "When a restore time arrives, the app restores the latest manual backup available in this storage.",
+          "label": "Scheduled Restore Times"
+        },
+        "upload_times": {
+          "aria": "Scheduled upload times",
+          "label": "Scheduled Upload Times"
+        }
+      },
       "markdown_export": {
         "exclude_citations": {
           "help": "Exclude citations and references when exporting to Markdown, keeping only the main content",

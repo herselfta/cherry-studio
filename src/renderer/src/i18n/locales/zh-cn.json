@@ -3849,6 +3849,39 @@
         "syncStatus": "备份状态",
         "title": "本地目录"
       },
+      "manual_schedule": {
+        "confirm_before_restore": {
+          "help": "开启后，定时恢复会先弹出确认窗口，展示即将恢复的最新备份对象；关闭后会直接恢复。",
+          "label": "恢复前确认"
+        },
+        "empty": "未设置时刻",
+        "help": "每天会在这些固定时刻执行上传。恢复会选取当前存储里最新的一份手动备份。",
+        "providers": {
+          "local": "本地目录",
+          "nutstore": "坚果云",
+          "s3": "S3 兼容存储",
+          "webdav": "WebDAV"
+        },
+        "quick_actions": {
+          "restore": "恢复备份",
+          "upload": "上传备份"
+        },
+        "requires_setup": "可以先配置固定时刻，当前存储配置完成后任务就会开始生效。",
+        "restore_confirm": {
+          "confirm": "确认恢复",
+          "content": "计划任务准备从 {{provider}} 恢复最新备份：{{fileName}}。修改时间：{{modifiedTime}}，大小：{{size}} 字节。确认后将覆盖当前数据。",
+          "title": "确认定时恢复"
+        },
+        "restore_times": {
+          "aria": "定时恢复时刻",
+          "help": "到点后会选取当前存储中最新的一份手动备份进行恢复。",
+          "label": "定时恢复时刻"
+        },
+        "upload_times": {
+          "aria": "定时上传时刻",
+          "label": "定时上传时刻"
+        }
+      },
       "markdown_export": {
         "exclude_citations": {
           "help": "导出 Markdown 时排除引用和参考文献，仅保留主要内容",

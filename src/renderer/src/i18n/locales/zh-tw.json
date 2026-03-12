@@ -3849,6 +3849,39 @@
         "syncStatus": "備份狀態",
         "title": "本機目錄"
       },
+      "manual_schedule": {
+        "confirm_before_restore": {
+          "help": "開啟後，定時還原會先顯示確認視窗，展示即將還原的最新備份對象；關閉後會直接還原。",
+          "label": "還原前確認"
+        },
+        "empty": "尚未設定時刻",
+        "help": "每天會在這些固定時刻執行上傳。還原會選取目前儲存中的最新手動備份。",
+        "providers": {
+          "local": "本機目錄",
+          "nutstore": "堅果雲",
+          "s3": "S3 相容儲存",
+          "webdav": "WebDAV"
+        },
+        "quick_actions": {
+          "restore": "還原備份",
+          "upload": "上傳備份"
+        },
+        "requires_setup": "可以先設定固定時刻，等目前儲存配置完成後，排程就會開始生效。",
+        "restore_confirm": {
+          "confirm": "確認還原",
+          "content": "排程任務準備從 {{provider}} 還原最新備份：{{fileName}}。修改時間：{{modifiedTime}}，大小：{{size}} 位元組。確認後將覆寫目前資料。",
+          "title": "確認定時還原"
+        },
+        "restore_times": {
+          "aria": "定時還原時刻",
+          "help": "到點後會選取目前儲存中最新的一份手動備份進行還原。",
+          "label": "定時還原時刻"
+        },
+        "upload_times": {
+          "aria": "定時上傳時刻",
+          "label": "定時上傳時刻"
+        }
+      },
       "markdown_export": {
         "exclude_citations": {
           "help": "匯出 Markdown 時排除引用和參考文獻，僅保留主要內容",

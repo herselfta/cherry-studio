@@ -28,6 +28,7 @@ import {
   getAutoSyncIntervalOptions,
   getAutoSyncIntervalValue
 } from './AutoSyncSettings'
+import ManualSyncScheduleSettings from './ManualSyncScheduleSettings'
 
 const logger = loggerService.withContext('LocalBackupSettings')
 
@@ -233,6 +234,8 @@ const LocalBackupSettings: React.FC = () => {
       <SettingRow>
         <SettingHelpText>{t('settings.data.auto_sync.manual.help')}</SettingHelpText>
       </SettingRow>
+      <SettingDivider />
+      <ManualSyncScheduleSettings provider="local" isConfigured={isSyncConfigured} />
       <SettingDivider />
       <SettingRow>
         <SettingRowTitle>{t('settings.data.auto_sync.label')}</SettingRowTitle>

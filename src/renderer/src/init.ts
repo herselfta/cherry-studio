@@ -2,6 +2,7 @@ import KeyvStorage from '@kangfenmao/keyv-storage'
 import { loggerService } from '@logger'
 
 import { startAutoSync } from './services/BackupService'
+import { startManualSyncSchedules } from './services/ManualSyncScheduleService'
 import { startNutstoreAutoSync } from './services/NutstoreService'
 import storeSyncService from './services/StoreSyncService'
 import { webTraceService } from './services/WebTraceService'
@@ -24,6 +25,7 @@ function initAutoSync() {
     if (nutstoreAutoSync) {
       startNutstoreAutoSync()
     }
+    startManualSyncSchedules()
   }, 8000)
 }
 

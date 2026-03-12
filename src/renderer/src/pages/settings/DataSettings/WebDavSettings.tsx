@@ -31,6 +31,7 @@ import {
   getAutoSyncIntervalOptions,
   getAutoSyncIntervalValue
 } from './AutoSyncSettings'
+import ManualSyncScheduleSettings from './ManualSyncScheduleSettings'
 
 const WebDavSettings: FC = () => {
   const {
@@ -177,6 +178,8 @@ const WebDavSettings: FC = () => {
       <SettingRow>
         <SettingHelpText>{t('settings.data.auto_sync.manual.help')}</SettingHelpText>
       </SettingRow>
+      <SettingDivider />
+      <ManualSyncScheduleSettings provider="webdav" isConfigured={isSyncConfigured} />
       <SettingDivider />
       <SettingRow>
         <SettingRowTitle>{t('settings.data.auto_sync.label')}</SettingRowTitle>

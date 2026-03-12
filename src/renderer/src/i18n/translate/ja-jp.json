@@ -3849,6 +3849,39 @@
         "syncStatus": "バックアップ状態",
         "title": "ローカルバックアップ"
       },
+      "manual_schedule": {
+        "confirm_before_restore": {
+          "help": "[to be translated]:When enabled, scheduled restores show a confirmation dialog with the latest backup target before any data is replaced. When disabled, restores start immediately.",
+          "label": "[to be translated]:Confirm Before Restore"
+        },
+        "empty": "[to be translated]:No times configured",
+        "help": "[to be translated]:Uploads run every day at the selected times. Restores always pick the latest manual backup from the current storage.",
+        "providers": {
+          "local": "[to be translated]:Local Directory",
+          "nutstore": "[to be translated]:Nutstore",
+          "s3": "[to be translated]:S3 Compatible Storage",
+          "webdav": "[to be translated]:WebDAV"
+        },
+        "quick_actions": {
+          "restore": "[to be translated]:Restore Backup",
+          "upload": "[to be translated]:Upload Backup"
+        },
+        "requires_setup": "[to be translated]:You can set daily times now. The schedule will start working after this storage is fully configured.",
+        "restore_confirm": {
+          "confirm": "[to be translated]:Restore Now",
+          "content": "[to be translated]:A scheduled task is ready to restore the latest backup from {{provider}}: {{fileName}}. Modified: {{modifiedTime}}. Size: {{size}} bytes. Confirming will overwrite your current data.",
+          "title": "[to be translated]:Confirm Scheduled Restore"
+        },
+        "restore_times": {
+          "aria": "[to be translated]:Scheduled restore times",
+          "help": "[to be translated]:When a restore time arrives, the app restores the latest manual backup available in this storage.",
+          "label": "[to be translated]:Scheduled Restore Times"
+        },
+        "upload_times": {
+          "aria": "[to be translated]:Scheduled upload times",
+          "label": "[to be translated]:Scheduled Upload Times"
+        }
+      },
       "markdown_export": {
         "exclude_citations": {
           "help": "Markdownエクスポート時に引用や参考文献を除外し、メインコンテンツのみを保持します。",

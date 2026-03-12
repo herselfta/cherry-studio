@@ -40,6 +40,7 @@ import {
   getAutoSyncIntervalOptions,
   getAutoSyncIntervalValue
 } from './AutoSyncSettings'
+import ManualSyncScheduleSettings from './ManualSyncScheduleSettings'
 
 const NutstoreSettings: FC = () => {
   const { theme } = useTheme()
@@ -278,6 +279,8 @@ const NutstoreSettings: FC = () => {
           <SettingRow>
             <SettingHelpText>{t('settings.data.auto_sync.manual.help')}</SettingHelpText>
           </SettingRow>
+          <SettingDivider />
+          <ManualSyncScheduleSettings provider="nutstore" isConfigured={isSyncConfigured} />
           <SettingDivider />
           <SettingRow>
             <SettingRowTitle>{t('settings.data.auto_sync.label')}</SettingRowTitle>

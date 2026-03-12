@@ -24,6 +24,7 @@ import {
   getAutoSyncIntervalOptions,
   getAutoSyncIntervalValue
 } from './AutoSyncSettings'
+import ManualSyncScheduleSettings from './ManualSyncScheduleSettings'
 
 const S3Settings: FC = () => {
   const { s3 = {} as S3Config } = useSettings()
@@ -212,6 +213,8 @@ const S3Settings: FC = () => {
       <SettingRow>
         <SettingHelpText>{t('settings.data.auto_sync.manual.help')}</SettingHelpText>
       </SettingRow>
+      <SettingDivider />
+      <ManualSyncScheduleSettings provider="s3" isConfigured={isSyncConfigured} />
       <SettingDivider />
       <SettingRow>
         <SettingRowTitle>{t('settings.data.auto_sync.label')}</SettingRowTitle>
