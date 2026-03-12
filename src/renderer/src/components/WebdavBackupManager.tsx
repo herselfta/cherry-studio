@@ -1,4 +1,5 @@
 import { DeleteOutlined, ExclamationCircleOutlined, ReloadOutlined } from '@ant-design/icons'
+import { AUTO_SYNC_FILE_NAME } from '@renderer/services/AutoSyncService'
 import { restoreFromWebdav } from '@renderer/services/BackupService'
 import { formatFileSize } from '@renderer/utils'
 import { Button, message, Modal, Table, Tooltip } from 'antd'
@@ -72,10 +73,11 @@ export function WebdavBackupManager({
         webdavPass,
         webdavPath
       } as WebdavConfig)
-      setBackupFiles(files)
+      const visibleFiles = files.filter((file) => file.fileName !== AUTO_SYNC_FILE_NAME)
+      setBackupFiles(visibleFiles)
       setPagination((prev) => ({
         ...prev,
-        total: files.length
+        total: visibleFiles.length
       }))
     } catch (error: any) {
       window.toast.error(`${t('settings.data.webdav.backup.manager.fetch.error')}: ${error.message}`)

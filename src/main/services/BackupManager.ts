@@ -20,6 +20,7 @@ import type { WebDavConfig } from '@types'
 import type { S3Config } from '@types'
 import archiver from 'archiver'
 import { exec } from 'child_process'
+import { createHash } from 'crypto'
 import { app } from 'electron'
 import * as fs from 'fs-extra'
 import StreamZip from 'node-stream-zip'
@@ -76,6 +77,7 @@ class BackupManager {
     this.listS3Files = this.listS3Files.bind(this)
     this.deleteS3File = this.deleteS3File.bind(this)
     this.checkS3Connection = this.checkS3Connection.bind(this)
+    this.calculateSyncFingerprint = this.calculateSyncFingerprint.bind(this)
   }
 
   private async setWritableRecursive(dirPath: string): Promise<void> {
@@ -835,6 +837,46 @@ class BackupManager {
     } catch (error) {
       logger.error('[BackupManager] Failed to delete temp backup:', error as Error)
       return false
+    }
+  }
+
+  async calculateSyncFingerprint(
+    _: Electron.IpcMainInvokeEvent,
+    normalizedData: string,
+    skipBackupFile: boolean
+  ): Promise<string> {
+    const hash = createHash('sha256')
+    hash.update(normalizedData)
+    hash.update(`skipBackupFile:${skipBackupFile}`)
+
+    if (!skipBackupFile) {
+      await this.appendDirectorySignature(hash, getDataPath(), getDataPath())
+    }
+
+    return hash.digest('hex')
+  }
+
+  private async appendDirectorySignature(hash: ReturnType<typeof createHash>, baseDir: string, currentDir: string) {
+    if (!(await fs.pathExists(currentDir))) {
+      hash.update(`missing:${path.relative(baseDir, currentDir) || '.'}`)
+      return
+    }
+
+    const entries = await fs.readdir(currentDir, { withFileTypes: true })
+    entries.sort((left, right) => left.name.localeCompare(right.name))
+
+    for (const entry of entries) {
+      const fullPath = path.join(currentDir, entry.name)
+      const relativePath = path.relative(baseDir, fullPath)
+
+      if (entry.isDirectory()) {
+        hash.update(`dir:${relativePath}`)
+        await this.appendDirectorySignature(hash, baseDir, fullPath)
+        continue
+      }
+
+      const stats = await fs.stat(fullPath)
+      hash.update(`file:${relativePath}:${stats.size}:${stats.mtimeMs}`)
     }
   }
 }

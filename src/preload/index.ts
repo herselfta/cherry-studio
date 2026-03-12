@@ -211,7 +211,9 @@ const api = {
     createLanTransferBackup: (data: string): Promise<string> =>
       ipcRenderer.invoke(IpcChannel.Backup_CreateLanTransferBackup, data),
     deleteTempBackup: (filePath: string): Promise<boolean> =>
-      ipcRenderer.invoke(IpcChannel.Backup_DeleteTempBackup, filePath)
+      ipcRenderer.invoke(IpcChannel.Backup_DeleteTempBackup, filePath),
+    calculateSyncFingerprint: (normalizedData: string, skipBackupFile: boolean): Promise<string> =>
+      ipcRenderer.invoke(IpcChannel.Backup_CalculateSyncFingerprint, normalizedData, skipBackupFile)
   },
   file: {
     select: (options?: OpenDialogOptions): Promise<FileMetadata[] | null> =>

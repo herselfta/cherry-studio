@@ -1,4 +1,5 @@
 import { DeleteOutlined, ExclamationCircleOutlined, ReloadOutlined } from '@ant-design/icons'
+import { AUTO_SYNC_FILE_NAME } from '@renderer/services/AutoSyncService'
 import { restoreFromS3 } from '@renderer/services/BackupService'
 import type { S3Config } from '@renderer/types'
 import { formatFileSize } from '@renderer/utils'
@@ -55,10 +56,11 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
         syncInterval: 0,
         maxBackups: 0
       })
-      setBackupFiles(files)
+      const visibleFiles = files.filter((file) => file.fileName !== AUTO_SYNC_FILE_NAME)
+      setBackupFiles(visibleFiles)
       setPagination((prev) => ({
         ...prev,
-        total: files.length
+        total: visibleFiles.length
       }))
     } catch (error: any) {
       window.toast.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))

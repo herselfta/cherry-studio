@@ -1,4 +1,5 @@
 import { DeleteOutlined, ExclamationCircleOutlined, ReloadOutlined } from '@ant-design/icons'
+import { AUTO_SYNC_FILE_NAME } from '@renderer/services/AutoSyncService'
 import { restoreFromLocal } from '@renderer/services/BackupService'
 import { formatFileSize } from '@renderer/utils'
 import { Button, message, Modal, Space, Table, Tooltip } from 'antd'
@@ -39,10 +40,11 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
     setLoading(true)
     try {
       const files = await window.api.backup.listLocalBackupFiles(localBackupDir)
-      setBackupFiles(files)
+      const visibleFiles = files.filter((file) => file.fileName !== AUTO_SYNC_FILE_NAME)
+      setBackupFiles(visibleFiles)
       setPagination((prev) => ({
         ...prev,
-        total: files.length
+        total: visibleFiles.length
       }))
     } catch (error: any) {
       window.toast.error(`${t('settings.data.local.backup.manager.fetch.error')}: ${error.message}`)

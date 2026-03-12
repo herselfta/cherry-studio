@@ -1,3 +1,4 @@
+import { AUTO_SYNC_FILE_NAME } from '@renderer/services/AutoSyncService'
 import { backupToS3 } from '@renderer/services/BackupService'
 import { formatFileSize } from '@renderer/utils'
 import { Input, Modal, Select, Spin } from 'antd'
@@ -133,7 +134,7 @@ export function useS3RestoreModal({
         maxBackups: 0,
         skipBackupFile: false
       })
-      setBackupFiles(files)
+      setBackupFiles(files.filter((file) => file.fileName !== AUTO_SYNC_FILE_NAME))
     } catch (error: any) {
       window.toast.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))
     } finally {

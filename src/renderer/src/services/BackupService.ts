@@ -8,6 +8,18 @@ import type { S3Config, WebDavConfig } from '@renderer/types'
 import { uuid } from '@renderer/utils'
 import dayjs from 'dayjs'
 
+import {
+  AUTO_SYNC_FILE_NAME,
+  decideAutoSyncAction,
+  findAutoSyncSnapshot,
+  getAutoSyncScopeKey,
+  getNormalizedBackupData,
+  getRemoteRevision,
+  hasMeaningfulLocalData,
+  loadAutoSyncMetadata,
+  saveAutoSyncMetadata,
+  type SyncFileEntry
+} from './AutoSyncService'
 import { NotificationService } from './NotificationService'
 
 const logger = loggerService.withContext('BackupService')
@@ -142,11 +154,13 @@ export async function reset() {
 export async function backupToWebdav({
   showMessage = false,
   customFileName = '',
-  autoBackupProcess = false
+  autoBackupProcess = false,
+  backupData
 }: {
   showMessage?: boolean
   customFileName?: string
   autoBackupProcess?: boolean
+  backupData?: string
 } = {}) {
   const notificationService = NotificationService.getInstance()
   if (isManualBackupRunning) {
@@ -182,11 +196,11 @@ export async function backupToWebdav({
   const timestamp = dayjs().format('YYYYMMDDHHmmss')
   const backupFileName = customFileName || `cherry-studio.${timestamp}.${hostname}.${deviceType}.zip`
   const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
-  const backupData = await getBackupData()
+  const finalBackupData = backupData || (await getBackupData())
 
   // 上传文件
   try {
-    const success = await window.api.backup.backupToWebdav(backupData, {
+    const success = await window.api.backup.backupToWebdav(finalBackupData, {
       webdavHost,
       webdavUser,
       webdavPass,
@@ -201,16 +215,18 @@ export async function backupToWebdav({
           lastSyncError: null
         })
       )
-      notificationService.send({
-        id: uuid(),
-        type: 'success',
-        title: i18n.t('common.success'),
-        message: i18n.t('message.backup.success'),
-        silent: false,
-        timestamp: Date.now(),
-        source: 'backup',
-        channel: 'system'
-      })
+      if (!autoBackupProcess) {
+        notificationService.send({
+          id: uuid(),
+          type: 'success',
+          title: i18n.t('common.success'),
+          message: i18n.t('message.backup.success'),
+          silent: false,
+          timestamp: Date.now(),
+          source: 'backup',
+          channel: 'system'
+        })
+      }
       showMessage && window.toast.success(i18n.t('message.backup.success'))
 
       // 清理旧备份文件
@@ -324,11 +340,13 @@ export async function restoreFromWebdav(fileName?: string) {
 export async function backupToS3({
   showMessage = false,
   customFileName = '',
-  autoBackupProcess = false
+  autoBackupProcess = false,
+  backupData
 }: {
   showMessage?: boolean
   customFileName?: string
   autoBackupProcess?: boolean
+  backupData?: string
 } = {}) {
   const notificationService = NotificationService.getInstance()
   if (isManualBackupRunning) {
@@ -356,10 +374,10 @@ export async function backupToS3({
   const timestamp = dayjs().format('YYYYMMDDHHmmss')
   const backupFileName = customFileName || `cherry-studio.${timestamp}.${hostname}.${deviceType}.zip`
   const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
-  const backupData = await getBackupData()
+  const finalBackupData = backupData || (await getBackupData())
 
   try {
-    const success = await window.api.backup.backupToS3(backupData, {
+    const success = await window.api.backup.backupToS3(finalBackupData, {
       ...s3Config,
       fileName: finalFileName
     })
@@ -372,16 +390,18 @@ export async function backupToS3({
           lastSyncTime: Date.now()
         })
       )
-      notificationService.send({
-        id: uuid(),
-        type: 'success',
-        title: i18n.t('common.success'),
-        message: i18n.t('message.backup.success'),
-        silent: false,
-        timestamp: Date.now(),
-        source: 'backup',
-        channel: 'system'
-      })
+      if (!autoBackupProcess) {
+        notificationService.send({
+          id: uuid(),
+          type: 'success',
+          title: i18n.t('common.success'),
+          message: i18n.t('message.backup.success'),
+          silent: false,
+          timestamp: Date.now(),
+          source: 'backup',
+          channel: 'system'
+        })
+      }
       showMessage && window.toast.success(i18n.t('message.backup.success'))
 
       // 清理旧备份文件
@@ -477,22 +497,18 @@ export async function restoreFromS3(fileName?: string) {
 let isManualBackupRunning = false
 
 // 为每种备份类型维护独立的状态
-let webdavAutoSyncStarted = false
 let webdavSyncTimeout: NodeJS.Timeout | null = null
-let isWebdavAutoBackupRunning = false
+let isWebdavAutoSyncRunning = false
 
-let s3AutoSyncStarted = false
 let s3SyncTimeout: NodeJS.Timeout | null = null
-let isS3AutoBackupRunning = false
+let isS3AutoSyncRunning = false
 
-let localAutoSyncStarted = false
 let localSyncTimeout: NodeJS.Timeout | null = null
-let isLocalAutoBackupRunning = false
+let isLocalAutoSyncRunning = false
 
 type BackupType = 'webdav' | 's3' | 'local'
 
 export function startAutoSync(immediate = false, type?: BackupType) {
-  // 如果没有指定类型，启动所有配置的自动同步
   if (!type) {
     const settings = store.getState().settings
     const { webdavAutoSync, webdavHost, localBackupAutoSync, localBackupDir } = settings
@@ -510,12 +526,9 @@ export function startAutoSync(immediate = false, type?: BackupType) {
     return
   }
 
-  // 根据类型启动特定的自动同步
-  if (type === 'webdav') {
-    if (webdavAutoSyncStarted) {
-      return
-    }
+  stopAutoSync(type)
 
+  if (type === 'webdav') {
     const settings = store.getState().settings
     const { webdavAutoSync, webdavHost } = settings
 
@@ -524,14 +537,8 @@ export function startAutoSync(immediate = false, type?: BackupType) {
       return
     }
 
-    webdavAutoSyncStarted = true
-    stopAutoSync('webdav')
-    scheduleNextBackup(immediate ? 'immediate' : 'fromLastSyncTime', 'webdav')
+    scheduleNextSync(immediate ? 'immediate' : 'fromLastSyncTime', 'webdav')
   } else if (type === 's3') {
-    if (s3AutoSyncStarted) {
-      return
-    }
-
     const settings = store.getState().settings
     const s3Settings = settings.s3
 
@@ -540,14 +547,8 @@ export function startAutoSync(immediate = false, type?: BackupType) {
       return
     }
 
-    s3AutoSyncStarted = true
-    stopAutoSync('s3')
-    scheduleNextBackup(immediate ? 'immediate' : 'fromLastSyncTime', 's3')
+    scheduleNextSync(immediate ? 'immediate' : 'fromLastSyncTime', 's3')
   } else if (type === 'local') {
-    if (localAutoSyncStarted) {
-      return
-    }
-
     const settings = store.getState().settings
     const { localBackupAutoSync, localBackupDir } = settings
 
@@ -556,19 +557,15 @@ export function startAutoSync(immediate = false, type?: BackupType) {
       return
     }
 
-    localAutoSyncStarted = true
-    stopAutoSync('local')
-    scheduleNextBackup(immediate ? 'immediate' : 'fromLastSyncTime', 'local')
+    scheduleNextSync(immediate ? 'immediate' : 'fromLastSyncTime', 'local')
   }
 
-  function scheduleNextBackup(scheduleType: 'immediate' | 'fromLastSyncTime' | 'fromNow', backupType: BackupType) {
+  function scheduleNextSync(scheduleType: 'immediate' | 'fromLastSyncTime' | 'fromNow', backupType: BackupType) {
     let syncInterval: number
     let lastSyncTime: number | undefined
-    let logPrefix: string
-
-    // 根据备份类型获取相应的配置和状态
     const settings = store.getState().settings
     const backup = store.getState().backup
+    const logPrefix = getAutoSyncLogPrefix(backupType)
 
     if (backupType === 'webdav') {
       if (webdavSyncTimeout) {
@@ -577,7 +574,6 @@ export function startAutoSync(immediate = false, type?: BackupType) {
       }
       syncInterval = settings.webdavSyncInterval
       lastSyncTime = backup.webdavSync?.lastSyncTime || undefined
-      logPrefix = '[WebdavAutoSync]'
     } else if (backupType === 's3') {
       if (s3SyncTimeout) {
         clearTimeout(s3SyncTimeout)
@@ -585,7 +581,6 @@ export function startAutoSync(immediate = false, type?: BackupType) {
       }
       syncInterval = settings.s3?.syncInterval || 0
       lastSyncTime = backup.s3Sync?.lastSyncTime || undefined
-      logPrefix = '[S3AutoSync]'
     } else if (backupType === 'local') {
       if (localSyncTimeout) {
         clearTimeout(localSyncTimeout)
@@ -593,7 +588,6 @@ export function startAutoSync(immediate = false, type?: BackupType) {
       }
       syncInterval = settings.localBackupSyncInterval
       lastSyncTime = backup.localBackupSync?.lastSyncTime || undefined
-      logPrefix = '[LocalAutoSync]'
     } else {
       return
     }
@@ -616,16 +610,10 @@ export function startAutoSync(immediate = false, type?: BackupType) {
         break
     }
 
-    const timeout = setTimeout(() => performAutoBackup(backupType), timeUntilNextSync)
-
-    // 保存对应类型的 timeout
-    if (backupType === 'webdav') {
-      webdavSyncTimeout = timeout
-    } else if (backupType === 's3') {
-      s3SyncTimeout = timeout
-    } else if (backupType === 'local') {
-      localSyncTimeout = timeout
-    }
+    setAutoSyncTimeout(
+      backupType,
+      setTimeout(() => performAutoSync(backupType), timeUntilNextSync)
+    )
 
     logger.verbose(
       `${logPrefix} Next sync scheduled in ${Math.floor(timeUntilNextSync / 1000 / 60)} minutes ${Math.floor(
@@ -634,141 +622,121 @@ export function startAutoSync(immediate = false, type?: BackupType) {
     )
   }
 
-  async function performAutoBackup(backupType: BackupType) {
-    let isRunning: boolean
-    let logPrefix: string
+  async function performAutoSync(backupType: BackupType) {
+    const logPrefix = getAutoSyncLogPrefix(backupType)
 
-    if (backupType === 'webdav') {
-      isRunning = isWebdavAutoBackupRunning
-      logPrefix = '[WebdavAutoSync]'
-    } else if (backupType === 's3') {
-      isRunning = isS3AutoBackupRunning
-      logPrefix = '[S3AutoSync]'
-    } else if (backupType === 'local') {
-      isRunning = isLocalAutoBackupRunning
-      logPrefix = '[LocalAutoSync]'
-    } else {
+    if (isAutoSyncRunning(backupType) || isManualBackupRunning) {
+      logger.verbose(`${logPrefix} Sync already in progress, rescheduling`)
+      scheduleNextSync('fromNow', backupType)
       return
     }
 
-    if (isRunning || isManualBackupRunning) {
-      logger.verbose(`${logPrefix} Backup already in progress, rescheduling`)
-      scheduleNextBackup('fromNow', backupType)
+    if (isStreamingInProgress()) {
+      logger.info(`${logPrefix} Streaming in progress, deferring sync`)
+      scheduleNextSync('fromNow', backupType)
       return
     }
 
-    // Check if any topic is currently streaming/loading
-    const state = store.getState()
-    const anyTopicLoading = Object.values(state.messages.loadingByTopic).some((loading) => loading === true)
-
-    if (anyTopicLoading) {
-      logger.info(`${logPrefix} Streaming in progress, deferring backup`)
-      scheduleNextBackup('fromNow', backupType)
-      return
-    }
-
-    // 设置运行状态
-    if (backupType === 'webdav') {
-      isWebdavAutoBackupRunning = true
-    } else if (backupType === 's3') {
-      isS3AutoBackupRunning = true
-    } else if (backupType === 'local') {
-      isLocalAutoBackupRunning = true
-    }
+    setAutoSyncRunning(backupType, true)
 
     const maxRetries = 4
     let retryCount = 0
 
     while (retryCount < maxRetries) {
       try {
-        logger.verbose(`${logPrefix} Starting auto backup... (attempt ${retryCount + 1}/${maxRetries})`)
+        logger.verbose(`${logPrefix} Starting auto sync... (attempt ${retryCount + 1}/${maxRetries})`)
+        setAutoSyncState(backupType, { syncing: true, lastSyncError: null })
 
-        if (backupType === 'webdav') {
-          await backupToWebdav({ autoBackupProcess: true })
-          store.dispatch(
-            setWebDAVSyncState({
-              lastSyncError: null,
-              lastSyncTime: Date.now(),
-              syncing: false
-            })
+        const syncContext = await buildAutoSyncContext(backupType)
+        const metadata = loadAutoSyncMetadata(syncContext.scopeKey)
+        const remoteSnapshot = await listAutoSyncSnapshot(backupType, syncContext.localBackupDir)
+        const remoteRevision = getRemoteRevision(remoteSnapshot)
+        const action = decideAutoSyncAction({
+          metadata,
+          currentFingerprint: syncContext.currentFingerprint,
+          remoteRevision,
+          hasMeaningfulLocalState: syncContext.hasMeaningfulLocalState
+        })
+
+        if (action === 'push') {
+          const pushedSnapshot = await pushAutoSyncSnapshot(backupType, syncContext.backupData)
+          const pushedRevision = getRemoteRevision(pushedSnapshot)
+
+          if (!pushedRevision) {
+            throw new Error('Remote sync snapshot revision is missing after push')
+          }
+
+          saveAutoSyncMetadata(syncContext.scopeKey, {
+            lastSyncedFingerprint: syncContext.currentFingerprint,
+            lastRemoteRevision: pushedRevision
+          })
+          setAutoSyncState(backupType, {
+            lastSyncError: null,
+            lastSyncTime: Date.now(),
+            syncing: false
+          })
+          logger.info(`${logPrefix} Pushed local changes to remote sync snapshot`)
+        } else if (action === 'pull') {
+          const remoteBackupData = await pullAutoSyncSnapshot(backupType, syncContext.localBackupDir)
+          const pulledFingerprint = await window.api.backup.calculateSyncFingerprint(
+            getNormalizedBackupData(remoteBackupData),
+            syncContext.skipBackupFile
           )
-        } else if (backupType === 's3') {
-          await backupToS3({ autoBackupProcess: true })
-          store.dispatch(
-            setS3SyncState({
-              lastSyncError: null,
-              lastSyncTime: Date.now(),
-              syncing: false
-            })
-          )
-        } else if (backupType === 'local') {
-          await backupToLocal({ autoBackupProcess: true })
-          store.dispatch(
-            setLocalBackupSyncState({
-              lastSyncError: null,
-              lastSyncTime: Date.now(),
-              syncing: false
-            })
-          )
+          const refreshedRemoteSnapshot = await listAutoSyncSnapshot(backupType, syncContext.localBackupDir)
+          const refreshedRemoteRevision = getRemoteRevision(refreshedRemoteSnapshot) || remoteRevision
+
+          saveAutoSyncMetadata(syncContext.scopeKey, {
+            lastSyncedFingerprint: pulledFingerprint,
+            lastRemoteRevision: refreshedRemoteRevision
+          })
+          setAutoSyncState(backupType, {
+            lastSyncError: null,
+            lastSyncTime: Date.now(),
+            syncing: false
+          })
+          logger.info(`${logPrefix} Pulled remote changes and restored local data`)
+        } else if (action === 'conflict') {
+          const conflictMessage = 'Sync conflict detected. Resolve local or remote changes manually before retrying.'
+
+          setAutoSyncState(backupType, {
+            lastSyncError: conflictMessage,
+            syncing: false
+          })
+          logger.warn(`${logPrefix} ${conflictMessage}`)
+        } else {
+          saveAutoSyncMetadata(syncContext.scopeKey, {
+            lastSyncedFingerprint: syncContext.currentFingerprint,
+            lastRemoteRevision: remoteRevision
+          })
+          setAutoSyncState(backupType, {
+            lastSyncError: null,
+            lastSyncTime: Date.now(),
+            syncing: false
+          })
+          logger.verbose(`${logPrefix} Local and remote snapshots are already in sync`)
         }
 
-        // 重置运行状态
-        if (backupType === 'webdav') {
-          isWebdavAutoBackupRunning = false
-        } else if (backupType === 's3') {
-          isS3AutoBackupRunning = false
-        } else if (backupType === 'local') {
-          isLocalAutoBackupRunning = false
-        }
-
-        scheduleNextBackup('fromNow', backupType)
+        setAutoSyncRunning(backupType, false)
+        scheduleNextSync('fromNow', backupType)
         break
       } catch (error: any) {
         retryCount++
         if (retryCount === maxRetries) {
-          logger.error(`${logPrefix} Auto backup failed after all retries:`, error)
+          logger.error(`${logPrefix} Auto sync failed after all retries:`, error)
 
-          if (backupType === 'webdav') {
-            store.dispatch(
-              setWebDAVSyncState({
-                lastSyncError: 'Auto backup failed',
-                lastSyncTime: Date.now(),
-                syncing: false
-              })
-            )
-          } else if (backupType === 's3') {
-            store.dispatch(
-              setS3SyncState({
-                lastSyncError: 'Auto backup failed',
-                lastSyncTime: Date.now(),
-                syncing: false
-              })
-            )
-          } else if (backupType === 'local') {
-            store.dispatch(
-              setLocalBackupSyncState({
-                lastSyncError: 'Auto backup failed',
-                lastSyncTime: Date.now(),
-                syncing: false
-              })
-            )
-          }
+          setAutoSyncState(backupType, {
+            lastSyncError: 'Auto sync failed',
+            lastSyncTime: Date.now(),
+            syncing: false
+          })
 
           await window.modal.error({
             title: i18n.t('message.backup.failed'),
             content: `${logPrefix} ${new Date().toLocaleString()} ` + error.message
           })
 
-          scheduleNextBackup('fromNow', backupType)
-
-          // 重置运行状态
-          if (backupType === 'webdav') {
-            isWebdavAutoBackupRunning = false
-          } else if (backupType === 's3') {
-            isS3AutoBackupRunning = false
-          } else if (backupType === 'local') {
-            isLocalAutoBackupRunning = false
-          }
+          scheduleNextSync('fromNow', backupType)
+          setAutoSyncRunning(backupType, false)
         } else {
           const backoffDelay = Math.pow(2, retryCount - 1) * 10000 - 3000
           logger.warn(`${logPrefix} Failed, retry ${retryCount}/${maxRetries} after ${backoffDelay / 1000}s`)
@@ -778,11 +746,11 @@ export function startAutoSync(immediate = false, type?: BackupType) {
           // 检查是否被用户停止
           let currentRunning: boolean
           if (backupType === 'webdav') {
-            currentRunning = isWebdavAutoBackupRunning
+            currentRunning = isWebdavAutoSyncRunning
           } else if (backupType === 's3') {
-            currentRunning = isS3AutoBackupRunning
+            currentRunning = isS3AutoSyncRunning
           } else {
-            currentRunning = isLocalAutoBackupRunning
+            currentRunning = isLocalAutoSyncRunning
           }
 
           if (!currentRunning) {
@@ -796,7 +764,6 @@ export function startAutoSync(immediate = false, type?: BackupType) {
 }
 
 export function stopAutoSync(type?: BackupType) {
-  // 如果没有指定类型，停止所有自动同步
   if (!type) {
     stopAutoSync('webdav')
     stopAutoSync('s3')
@@ -810,25 +777,232 @@ export function stopAutoSync(type?: BackupType) {
       clearTimeout(webdavSyncTimeout)
       webdavSyncTimeout = null
     }
-    isWebdavAutoBackupRunning = false
-    webdavAutoSyncStarted = false
+    isWebdavAutoSyncRunning = false
   } else if (type === 's3') {
     if (s3SyncTimeout) {
       logger.info('[S3AutoSync] Stopping auto sync')
       clearTimeout(s3SyncTimeout)
       s3SyncTimeout = null
     }
-    isS3AutoBackupRunning = false
-    s3AutoSyncStarted = false
+    isS3AutoSyncRunning = false
   } else if (type === 'local') {
     if (localSyncTimeout) {
       logger.info('[LocalAutoSync] Stopping auto sync')
       clearTimeout(localSyncTimeout)
       localSyncTimeout = null
     }
-    isLocalAutoBackupRunning = false
-    localAutoSyncStarted = false
+    isLocalAutoSyncRunning = false
   }
+}
+
+function getAutoSyncLogPrefix(backupType: BackupType) {
+  if (backupType === 'webdav') {
+    return '[WebdavAutoSync]'
+  }
+
+  if (backupType === 's3') {
+    return '[S3AutoSync]'
+  }
+
+  return '[LocalAutoSync]'
+}
+
+function setAutoSyncTimeout(backupType: BackupType, timeout: NodeJS.Timeout) {
+  if (backupType === 'webdav') {
+    webdavSyncTimeout = timeout
+  } else if (backupType === 's3') {
+    s3SyncTimeout = timeout
+  } else {
+    localSyncTimeout = timeout
+  }
+}
+
+function isAutoSyncRunning(backupType: BackupType) {
+  if (backupType === 'webdav') {
+    return isWebdavAutoSyncRunning
+  }
+
+  if (backupType === 's3') {
+    return isS3AutoSyncRunning
+  }
+
+  return isLocalAutoSyncRunning
+}
+
+function setAutoSyncRunning(backupType: BackupType, running: boolean) {
+  if (backupType === 'webdav') {
+    isWebdavAutoSyncRunning = running
+  } else if (backupType === 's3') {
+    isS3AutoSyncRunning = running
+  } else {
+    isLocalAutoSyncRunning = running
+  }
+}
+
+function setAutoSyncState(
+  backupType: BackupType,
+  payload: {
+    lastSyncTime?: number | null
+    syncing?: boolean
+    lastSyncError?: string | null
+  }
+) {
+  if (backupType === 'webdav') {
+    store.dispatch(setWebDAVSyncState(payload))
+  } else if (backupType === 's3') {
+    store.dispatch(setS3SyncState(payload))
+  } else {
+    store.dispatch(setLocalBackupSyncState(payload))
+  }
+}
+
+function isStreamingInProgress() {
+  const loadingByTopic = store.getState().messages.loadingByTopic || {}
+  return Object.values(loadingByTopic).some((loading) => loading === true)
+}
+
+async function buildAutoSyncContext(backupType: BackupType) {
+  const backupData = await getBackupData()
+  const normalizedBackupData = getNormalizedBackupData(backupData)
+
+  if (backupType === 'webdav') {
+    const { webdavHost, webdavUser, webdavPath, webdavSkipBackupFile } = store.getState().settings
+
+    return {
+      backupData,
+      currentFingerprint: await window.api.backup.calculateSyncFingerprint(normalizedBackupData, webdavSkipBackupFile),
+      hasMeaningfulLocalState: hasMeaningfulLocalData(backupData),
+      localBackupDir: undefined,
+      scopeKey: getAutoSyncScopeKey('webdav', {
+        webdavHost,
+        webdavUser,
+        webdavPath,
+        skipBackupFile: webdavSkipBackupFile
+      }),
+      skipBackupFile: webdavSkipBackupFile
+    }
+  }
+
+  if (backupType === 's3') {
+    const s3Config = store.getState().settings.s3
+
+    return {
+      backupData,
+      currentFingerprint: await window.api.backup.calculateSyncFingerprint(
+        normalizedBackupData,
+        s3Config.skipBackupFile
+      ),
+      hasMeaningfulLocalState: hasMeaningfulLocalData(backupData),
+      localBackupDir: undefined,
+      scopeKey: getAutoSyncScopeKey('s3', {
+        endpoint: s3Config.endpoint,
+        region: s3Config.region,
+        bucket: s3Config.bucket,
+        root: s3Config.root,
+        skipBackupFile: s3Config.skipBackupFile
+      }),
+      skipBackupFile: s3Config.skipBackupFile
+    }
+  }
+
+  const { localBackupDir: localBackupDirSetting, localBackupSkipBackupFile } = store.getState().settings
+  const localBackupDir = await window.api.resolvePath(localBackupDirSetting)
+
+  return {
+    backupData,
+    currentFingerprint: await window.api.backup.calculateSyncFingerprint(
+      normalizedBackupData,
+      localBackupSkipBackupFile
+    ),
+    hasMeaningfulLocalState: hasMeaningfulLocalData(backupData),
+    localBackupDir,
+    scopeKey: getAutoSyncScopeKey('local', {
+      localBackupDir,
+      skipBackupFile: localBackupSkipBackupFile
+    }),
+    skipBackupFile: localBackupSkipBackupFile
+  }
+}
+
+async function listAutoSyncSnapshot(backupType: BackupType, localBackupDir?: string): Promise<SyncFileEntry | null> {
+  let files: SyncFileEntry[] = []
+
+  if (backupType === 'webdav') {
+    const { webdavHost, webdavUser, webdavPass, webdavPath } = store.getState().settings
+    files = await window.api.backup.listWebdavFiles({
+      webdavHost,
+      webdavUser,
+      webdavPass,
+      webdavPath
+    })
+  } else if (backupType === 's3') {
+    files = await window.api.backup.listS3Files(store.getState().settings.s3)
+  } else if (localBackupDir) {
+    files = await window.api.backup.listLocalBackupFiles(localBackupDir)
+  }
+
+  return findAutoSyncSnapshot(files)
+}
+
+async function pushAutoSyncSnapshot(backupType: BackupType, backupData: string) {
+  if (backupType === 'webdav') {
+    await backupToWebdav({
+      autoBackupProcess: true,
+      backupData,
+      customFileName: AUTO_SYNC_FILE_NAME
+    })
+    return await listAutoSyncSnapshot('webdav')
+  }
+
+  if (backupType === 's3') {
+    await backupToS3({
+      autoBackupProcess: true,
+      backupData,
+      customFileName: AUTO_SYNC_FILE_NAME
+    })
+    return await listAutoSyncSnapshot('s3')
+  }
+
+  await backupToLocal({
+    autoBackupProcess: true,
+    backupData,
+    customFileName: AUTO_SYNC_FILE_NAME
+  })
+
+  const localBackupDir = await window.api.resolvePath(store.getState().settings.localBackupDir)
+  return await listAutoSyncSnapshot('local', localBackupDir)
+}
+
+async function pullAutoSyncSnapshot(backupType: BackupType, localBackupDir?: string) {
+  if (backupType === 'webdav') {
+    const { webdavHost, webdavUser, webdavPass, webdavPath } = store.getState().settings
+    const restoreData = await window.api.backup.restoreFromWebdav({
+      webdavHost,
+      webdavUser,
+      webdavPass,
+      webdavPath,
+      fileName: AUTO_SYNC_FILE_NAME
+    })
+    await handleData(JSON.parse(restoreData))
+    return restoreData
+  }
+
+  if (backupType === 's3') {
+    const restoreData = await window.api.backup.restoreFromS3({
+      ...store.getState().settings.s3,
+      fileName: AUTO_SYNC_FILE_NAME
+    })
+    await handleData(JSON.parse(restoreData))
+    return restoreData
+  }
+
+  if (!localBackupDir) {
+    throw new Error('Local backup directory is required for local auto sync restore')
+  }
+
+  const restoreData = await window.api.backup.restoreFromLocalBackup(AUTO_SYNC_FILE_NAME, localBackupDir)
+  await handleData(JSON.parse(restoreData))
+  return restoreData
 }
 
 export async function getBackupData() {
@@ -927,11 +1101,13 @@ async function clearDatabase() {
 export async function backupToLocal({
   showMessage = false,
   customFileName = '',
-  autoBackupProcess = false
+  autoBackupProcess = false,
+  backupData
 }: {
   showMessage?: boolean
   customFileName?: string
   autoBackupProcess?: boolean
+  backupData?: string
 } = {}) {
   const notificationService = NotificationService.getInstance()
   if (isManualBackupRunning) {
@@ -964,10 +1140,10 @@ export async function backupToLocal({
   const timestamp = dayjs().format('YYYYMMDDHHmmss')
   const backupFileName = customFileName || `cherry-studio.${timestamp}.${hostname}.${deviceType}.zip`
   const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
-  const backupData = await getBackupData()
+  const finalBackupData = backupData || (await getBackupData())
 
   try {
-    const result = await window.api.backup.backupToLocalDir(backupData, finalFileName, {
+    const result = await window.api.backup.backupToLocalDir(finalBackupData, finalFileName, {
       localBackupDir,
       skipBackupFile: localBackupSkipBackupFile
     })
