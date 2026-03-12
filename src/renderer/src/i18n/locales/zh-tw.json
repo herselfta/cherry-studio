@@ -7,7 +7,9 @@
         "invalid_agent": "無效的 Agent"
       },
       "model": {
-        "tooltip": "目前，僅支援 Anthropic 端點的模型可供代理功能使用。"
+        "supported_providers": "支援的服務商",
+        "tooltip": "目前，僅支援 Anthropic 端點的模型可供 Agent 功能使用。",
+        "view_providers": "檢視支援的服務商"
       },
       "title": "新增 Agent",
       "type": {
@@ -2289,7 +2291,10 @@
     "dangbei": "當貝 AI",
     "doubao": "豆包",
     "hailuo": "海螺",
+    "ima": "ima",
     "metaso": "秘塔 AI 搜尋",
+    "minimax-agent": "MiniMax Agent CN",
+    "minimax-global": "MiniMax Agent",
     "nami-ai": "奈米 AI",
     "nami-ai-search": "奈米 AI 搜尋",
     "qwen": "通義千問",
@@ -3050,7 +3055,8 @@
     "lmstudio": "LM Studio",
     "longcat": "龍貓",
     "mimo": "小米 MiMo",
-    "minimax": "MiniMax",
+    "minimax": "MiniMax CN",
+    "minimax-global": "MiniMax",
     "mistral": "Mistral",
     "modelscope": "ModelScope 魔搭",
     "moonshot": "月之暗面",
@@ -3078,6 +3084,7 @@
     "voyageai": "Voyage AI",
     "xirang": "天翼雲息壤",
     "yi": "零一萬物",
+    "zai": "Z.ai",
     "zhinao": "360 智腦",
     "zhipu": "智譜開放平台"
   },
@@ -5023,6 +5030,11 @@
       },
       "docs_check": "檢查",
       "docs_more_details": "檢視更多細節",
+      "filter": {
+        "agent": "支援 Agent",
+        "all": "全部服務商"
+      },
+      "filter_agent": "篩選支援 Agent 的服務商",
       "get_api_key": "點選這裡取得金鑰",
       "misc": "其他",
       "no_models_for_check": "沒有可以被檢查的模型（例如對話模型）",

@@ -7,7 +7,9 @@
         "invalid_agent": "Agent inválido"
       },
       "model": {
-        "tooltip": "Atualmente, apenas modelos que suportam endpoints da Anthropic estão disponíveis para o recurso Agente."
+        "supported_providers": "Provedores Suportados",
+        "tooltip": "Atualmente, apenas modelos que suportam endpoints da Anthropic estão disponíveis para o recurso Agente.",
+        "view_providers": "Ver provedores suportados"
       },
       "title": "Adicionar Agente",
       "type": {
@@ -136,9 +138,9 @@
     "settings": {
       "advance": {
         "envVars": {
-          "description": "[to be translated]:Set custom environment variables for the agent runtime.",
-          "helper": "[to be translated]:Enter custom environment variables (one per line, format: KEY=value)",
-          "label": "[to be translated]:Environment Variables"
+          "description": "Definir variáveis de ambiente personalizadas para o tempo de execução do agente.",
+          "helper": "Insira variáveis de ambiente personalizadas (uma por linha, formato: CHAVE=valor)",
+          "label": "Variáveis de Ambiente"
         },
         "maxTurns": {
           "description": "Defina o número de ciclos de solicitação/resposta executados automaticamente pelo agente.",
@@ -2288,8 +2290,11 @@
     "chatglm": "ChatGLM",
     "dangbei": "Dangbei",
     "doubao": "Doubao",
-    "hailuo": "MINIMAX",
+    "hailuo": "Hailuo",
+    "ima": "ima",
     "metaso": "Metaso",
+    "minimax-agent": "MiniMax Agent CN",
+    "minimax-global": "MiniMax Agent",
     "nami-ai": "Nami AI",
     "nami-ai-search": "Nami AI Search",
     "qwen": "Qwen",
@@ -3050,7 +3055,8 @@
     "lmstudio": "Estúdio LM",
     "longcat": "Totoro",
     "mimo": "Xiaomi MiMo",
-    "minimax": "Minimax",
+    "minimax": "Minimax CN",
+    "minimax-global": "MiniMax",
     "mistral": "Mistral",
     "modelscope": "ModelScope MôDá",
     "moonshot": "Disparo Lunar",
@@ -3078,6 +3084,7 @@
     "voyageai": "Voyage AI",
     "xirang": "XiRang do Nuvem Telecom",
     "yi": "ZeroUmTudo",
+    "zai": "Z.ai",
     "zhinao": "360 Inteligência Artificial",
     "zhipu": "BigModel"
   },
@@ -5023,6 +5030,11 @@
       },
       "docs_check": "Verificar",
       "docs_more_details": "Obter mais detalhes",
+      "filter": {
+        "agent": "Suportado por Agente",
+        "all": "Todos os Provedores"
+      },
+      "filter_agent": "Agente de Filtro - Provedores Suportados",
       "get_api_key": "Clique aqui para obter a chave",
       "misc": "outro",
       "no_models_for_check": "Não há modelos disponíveis para verificação (por exemplo, modelos de conversa)",

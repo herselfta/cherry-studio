@@ -7,7 +7,9 @@
         "invalid_agent": "Μη έγκυρος Agent"
       },
       "model": {
-        "tooltip": "Προς το παρόν, μόνο μοντέλα που υποστηρίζουν τελικά σημεία Anthropic είναι διαθέσιμα για τη λειτουργία Agent."
+        "supported_providers": "Υποστηριζόμενοι Πάροχοι",
+        "tooltip": "Προς το παρόν, μόνο μοντέλα που υποστηρίζουν τελικά σημεία Anthropic είναι διαθέσιμα για τη λειτουργία Agent.",
+        "view_providers": "Δείτε τους υποστηριζόμενους παρόχους"
       },
       "title": "Προσθήκη Agent",
       "type": {
@@ -136,9 +138,9 @@
     "settings": {
       "advance": {
         "envVars": {
-          "description": "[to be translated]:Set custom environment variables for the agent runtime.",
-          "helper": "[to be translated]:Enter custom environment variables (one per line, format: KEY=value)",
-          "label": "[to be translated]:Environment Variables"
+          "description": "Ορίστε προσαρμοσμένες μεταβλητές περιβάλλοντος για τη χρόνο εκτέλεσης του πράκτορα.",
+          "helper": "Εισαγάγετε προσαρμοσμένες μεταβλητές περιβάλλοντος (μία ανά γραμμή, μορφή: ΚΛΕΙΔΙ=τιμή)",
+          "label": "Μεταβλητές Περιβάλλοντος"
         },
         "maxTurns": {
           "description": "Ορίστε τον αριθμό γύρων αιτήματος/απάντησης που θα εκτελούνται αυτόματα από τον διαμεσολαβητή.",
@@ -2288,8 +2290,11 @@
     "chatglm": "ChatGLM",
     "dangbei": "Dangbei",
     "doubao": "Doubao",
-    "hailuo": "MINIMAX",
+    "hailuo": "Hailuo",
+    "ima": "ima",
     "metaso": "Metaso",
+    "minimax-agent": "MiniMax Agent CN",
+    "minimax-global": "MiniMax Agent",
     "nami-ai": "Nami AI",
     "nami-ai-search": "Nami AI Search",
     "qwen": "Qwen",
@@ -3050,7 +3055,8 @@
     "lmstudio": "LM Studio",
     "longcat": "Τσίρο",
     "mimo": "Xiaomi MiMo",
-    "minimax": "MiniMax",
+    "minimax": "MiniMax CN",
+    "minimax-global": "Minimax",
     "mistral": "Mistral",
     "modelscope": "ModelScope Magpie",
     "moonshot": "Σκοτεινή Κορωνίδα της Σελήνης",
@@ -3078,6 +3084,7 @@
     "voyageai": "Voyage AI",
     "xirang": "China Telecom Xiran",
     "yi": "Zero One Wanyiwu",
+    "zai": "Ζ.ai",
     "zhinao": "360 Intelligent Brain",
     "zhipu": "BigModel"
   },
@@ -5023,6 +5030,11 @@
       },
       "docs_check": "Άνοιγμα",
       "docs_more_details": "Λάβετε περισσότερες λεπτομέρειες",
+      "filter": {
+        "agent": "Υποστηριζόμενος από πράκτορα",
+        "all": "Όλοι οι Πάροχοι"
+      },
+      "filter_agent": "Υποστηριζόμενοι Πάροχοι του Φίλτρου Πράκτορα",
       "get_api_key": "Κάντε κλικ εδώ για να πάρετε κλειδί",
       "misc": "Άλλο",
       "no_models_for_check": "Δεν υπάρχουν μοντέλα για έλεγχο (π.χ. μοντέλα συνομιλίας)",

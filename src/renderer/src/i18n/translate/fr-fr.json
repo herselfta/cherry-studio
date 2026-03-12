@@ -7,7 +7,9 @@
         "invalid_agent": "Agent invalide"
       },
       "model": {
-        "tooltip": "Actuellement, seuls les modèles qui prennent en charge les points de terminaison Anthropic sont disponibles pour la fonctionnalité Agent."
+        "supported_providers": "Fournisseurs pris en charge",
+        "tooltip": "Actuellement, seuls les modèles qui prennent en charge les points de terminaison Anthropic sont disponibles pour la fonctionnalité Agent.",
+        "view_providers": "Afficher les fournisseurs pris en charge"
       },
       "title": "Ajouter un agent",
       "type": {
@@ -136,9 +138,9 @@
     "settings": {
       "advance": {
         "envVars": {
-          "description": "[to be translated]:Set custom environment variables for the agent runtime.",
-          "helper": "[to be translated]:Enter custom environment variables (one per line, format: KEY=value)",
-          "label": "[to be translated]:Environment Variables"
+          "description": "Définir des variables d’environnement personnalisées pour l’exécution de l’agent.",
+          "helper": "Entrez des variables d'environnement personnalisées (une par ligne, format : CLÉ=valeur)",
+          "label": "Variables d'environnement"
         },
         "maxTurns": {
           "description": "Définir le nombre de cycles de requête/réponse exécutés automatiquement par l'agent.",
@@ -2288,8 +2290,11 @@
     "chatglm": "ChatGLM",
     "dangbei": "Dangbei",
     "doubao": "Doubao",
-    "hailuo": "MINIMAX",
+    "hailuo": "Hailuo",
+    "ima": "ima",
     "metaso": "Metaso",
+    "minimax-agent": "MiniMax Agent CN",
+    "minimax-global": "MiniMax Agent",
     "nami-ai": "Nami AI",
     "nami-ai-search": "Nami AI Search",
     "qwen": "Qwen",
@@ -3050,7 +3055,8 @@
     "lmstudio": "Studio LM",
     "longcat": "Mon voisin Totoro",
     "mimo": "Xiaomi MiMo",
-    "minimax": "MiniMax",
+    "minimax": "MiniMax CN",
+    "minimax-global": "MiniMax",
     "mistral": "Mistral",
     "modelscope": "ModelScope MoDa",
     "moonshot": "Face Sombre de la Lune",
@@ -3078,6 +3084,7 @@
     "voyageai": "Voyage AI",
     "xirang": "CTyun XiRang",
     "yi": "ZéroUnInfini",
+    "zai": "Z.ai",
     "zhinao": "360 ZhiNao",
     "zhipu": "BigModel"
   },
@@ -5023,6 +5030,11 @@
       },
       "docs_check": "Voir",
       "docs_more_details": "Obtenir plus de détails",
+      "filter": {
+        "agent": "Prise en charge par un agent",
+        "all": "Tous les fournisseurs"
+      },
+      "filter_agent": "Fournisseurs pris en charge par l'agent de filtrage",
       "get_api_key": "Cliquez ici pour obtenir une clé",
       "misc": "autre",
       "no_models_for_check": "Aucun modèle détectable (par exemple, modèle de chat)",

@@ -7,7 +7,9 @@
         "invalid_agent": "Agent inválido"
       },
       "model": {
-        "tooltip": "Actualmente, solo los modelos que admiten puntos finales de Anthropic están disponibles para la función Agente."
+        "supported_providers": "Proveedores Admitidos",
+        "tooltip": "Actualmente, solo los modelos que admiten puntos finales de Anthropic están disponibles para la función Agente.",
+        "view_providers": "Ver proveedores compatibles"
       },
       "title": "Agregar Agente",
       "type": {
@@ -136,9 +138,9 @@
     "settings": {
       "advance": {
         "envVars": {
-          "description": "[to be translated]:Set custom environment variables for the agent runtime.",
-          "helper": "[to be translated]:Enter custom environment variables (one per line, format: KEY=value)",
-          "label": "[to be translated]:Environment Variables"
+          "description": "Establece variables de entorno personalizadas para el tiempo de ejecución del agente.",
+          "helper": "Introduce variables de entorno personalizadas (una por línea, formato: CLAVE=valor)",
+          "label": "Variables de entorno"
         },
         "maxTurns": {
           "description": "Establece el número de rondas de solicitud/respuesta que el agente ejecutará automáticamente.",
@@ -2288,8 +2290,11 @@
     "chatglm": "ChatGLM",
     "dangbei": "Dangbei",
     "doubao": "Doubao",
-    "hailuo": "MINIMAX",
+    "hailuo": "Hailuo",
+    "ima": "ima",
     "metaso": "Metaso",
+    "minimax-agent": "MiniMax Agent CN",
+    "minimax-global": "MiniMax Agent",
     "nami-ai": "Nami AI",
     "nami-ai-search": "Nami AI Search",
     "qwen": "Qwen",
@@ -3050,7 +3055,8 @@
     "lmstudio": "Estudio LM",
     "longcat": "Totoro",
     "mimo": "Xiaomi MiMo",
-    "minimax": "Minimax",
+    "minimax": "Minimax CN",
+    "minimax-global": "MiniMax",
     "mistral": "Mistral",
     "modelscope": "ModelScope Módulo",
     "moonshot": "Lanzamiento Lunar",
@@ -3078,6 +3084,7 @@
     "voyageai": "Voyage AI",
     "xirang": "Telecom Nube XiRang",
     "yi": "Cero Uno Todo",
+    "zai": "Z.ai",
     "zhinao": "360 Inteligente",
     "zhipu": "BigModel"
   },
@@ -5023,6 +5030,11 @@
       },
       "docs_check": "Ver",
       "docs_more_details": "Obtener más detalles",
+      "filter": {
+        "agent": "Soporte de Agente",
+        "all": "Todos los Proveedores"
+      },
+      "filter_agent": "Proveedores compatibles con el agente de filtrado",
       "get_api_key": "Haga clic aquí para obtener la clave",
       "misc": "otro",
       "no_models_for_check": "No hay modelos disponibles para revisar (por ejemplo, modelos de conversación)",
