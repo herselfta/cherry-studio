@@ -460,7 +460,8 @@ export class SelectionService {
 			movable: true,
 			hasShadow: false,
 			thickFrame: false,
-			roundedCorners: true,
+			// Keep rounding in the renderer layer so it stays visually consistent across zoom factors.
+			roundedCorners: false,
 
 			// Platform specific settings
 			//   [macOS] DO NOT set focusable to false, it will make other windows bring to front together
@@ -759,8 +760,8 @@ export class SelectionService {
 		toolbarHeight: number;
 	} {
 		return {
-			toolbarWidth: this.TOOLBAR_WIDTH * this.zoomFactor,
-			toolbarHeight: this.TOOLBAR_HEIGHT * this.zoomFactor,
+			toolbarWidth: Math.ceil(this.TOOLBAR_WIDTH * this.zoomFactor),
+			toolbarHeight: Math.ceil(this.TOOLBAR_HEIGHT * this.zoomFactor),
 		};
 	}
 

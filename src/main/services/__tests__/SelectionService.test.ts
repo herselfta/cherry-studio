@@ -170,7 +170,7 @@ describe("SelectionService", () => {
 		const service = Object.create(SelectionService.prototype) as any;
 
 		service.zoomFactor = 0.9;
-		service.TOOLBAR_WIDTH = 350;
+		service.TOOLBAR_WIDTH = 351;
 		service.TOOLBAR_HEIGHT = 43;
 		service.toolbarWindow = null;
 		service.isToolbarAlive = () => false;
@@ -179,6 +179,9 @@ describe("SelectionService", () => {
 
 		expect(electronMocks.browserWindowMock).toHaveBeenCalledWith(
 			expect.objectContaining({
+				width: 316,
+				height: 39,
+				roundedCorners: false,
 				webPreferences: expect.objectContaining({
 					zoomFactor: 0.9,
 				}),
