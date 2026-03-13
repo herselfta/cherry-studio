@@ -112,6 +112,7 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
   const [copyIconAnimation, setCopyIconAnimation] = useState<'none' | 'enter' | 'exit'>('none')
   const { setTimeoutTimer, clearTimeoutTimer } = useTimer()
   const resizeAnimationFrameRef = useRef<number | undefined>(undefined)
+  const delayedResizeTimeoutRef = useRef<number | undefined>(undefined)
 
   const realActionItems = useMemo(() => {
     return actionItems?.filter((item) => item.enabled)
@@ -159,6 +160,21 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
     })
   }, [demo, updateWindowSize])
 
+  const scheduleDelayedWindowSizeUpdate = useCallback(() => {
+    if (demo) {
+      return
+    }
+
+    if (delayedResizeTimeoutRef.current) {
+      window.clearTimeout(delayedResizeTimeoutRef.current)
+    }
+
+    delayedResizeTimeoutRef.current = window.setTimeout(() => {
+      delayedResizeTimeoutRef.current = undefined
+      scheduleWindowSizeUpdate()
+    }, 120)
+  }, [demo, scheduleWindowSizeUpdate])
+
   // listen to selectionService events
   useEffect(() => {
     const cleanups: (() => void)[] = []
@@ -178,6 +194,7 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
         )
         cleanups.push(cleanup)
         scheduleWindowSizeUpdate()
+        scheduleDelayedWindowSizeUpdate()
       }
     )
 
@@ -187,6 +204,7 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
       (_, isVisible: boolean) => {
         if (isVisible) {
           scheduleWindowSizeUpdate()
+          scheduleDelayedWindowSizeUpdate()
         } else {
           onHideCleanUp()
         }
@@ -198,7 +216,7 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
       toolbarVisibilityChangeListenRemover()
       cleanups.forEach((cleanup) => cleanup())
     }
-  }, [onHideCleanUp, scheduleWindowSizeUpdate, setTimeoutTimer])
+  }, [onHideCleanUp, scheduleDelayedWindowSizeUpdate, scheduleWindowSizeUpdate, setTimeoutTimer])
 
   // Keep the toolbar width aligned with the rendered content width.
   useEffect(() => {
@@ -206,25 +224,52 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
       return
     }
 
-    const observer = new ResizeObserver(() => scheduleWindowSizeUpdate())
-    observer.observe(containerRef.current)
-    scheduleWindowSizeUpdate()
+    const resizeObserver = new ResizeObserver(() => scheduleWindowSizeUpdate())
+    resizeObserver.observe(containerRef.current)
 
-    return () => observer.disconnect()
-  }, [actionItems, customCss, demo, isCompact, language, scheduleWindowSizeUpdate])
+    const mutationObserver = new MutationObserver(() => scheduleWindowSizeUpdate())
+    mutationObserver.observe(containerRef.current, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    })
+
+    void document.fonts?.ready.then(() => {
+      scheduleWindowSizeUpdate()
+      scheduleDelayedWindowSizeUpdate()
+    })
+
+    scheduleWindowSizeUpdate()
+    scheduleDelayedWindowSizeUpdate()
+
+    return () => {
+      resizeObserver.disconnect()
+      mutationObserver.disconnect()
+    }
+  }, [actionItems, customCss, demo, isCompact, language, scheduleDelayedWindowSizeUpdate, scheduleWindowSizeUpdate])
 
   useEffect(
     () => () => {
       if (resizeAnimationFrameRef.current) {
         cancelAnimationFrame(resizeAnimationFrameRef.current)
       }
+      if (delayedResizeTimeoutRef.current) {
+        window.clearTimeout(delayedResizeTimeoutRef.current)
+      }
     },
     []
   )
 
   useEffect(() => {
-    !demo && i18n.changeLanguage(language || navigator.language || defaultLanguage)
-  }, [language, demo])
+    if (demo) {
+      return
+    }
+
+    void i18n.changeLanguage(language || navigator.language || defaultLanguage).finally(() => {
+      scheduleWindowSizeUpdate()
+      scheduleDelayedWindowSizeUpdate()
+    })
+  }, [demo, language, scheduleDelayedWindowSizeUpdate, scheduleWindowSizeUpdate])
 
   useEffect(() => {
     if (demo) return
@@ -424,6 +469,8 @@ const ActionWrapper = styled.div`
   flex-direction: row;
   align-items: center;
   justify-content: center;
+  flex: none;
+  width: max-content;
   background-color: transparent;
   border-width: var(--selection-toolbar-buttons-border-width);
   border-style: var(--selection-toolbar-buttons-border-style);
