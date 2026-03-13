@@ -221,6 +221,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.998.0
         version: 3.998.0
+      '@biomejs/biome':
+        specifier: 2.2.4
+        version: 2.2.4
       '@cherrystudio/ai-core':
         specifier: workspace:*
         version: link:packages/aiCore
