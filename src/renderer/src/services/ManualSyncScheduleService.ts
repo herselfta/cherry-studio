@@ -1,7 +1,7 @@
 import { loggerService } from '@logger'
 import i18n from '@renderer/i18n'
 import store from '@renderer/store'
-import type { S3Config, WebDavConfig } from '@renderer/types'
+import type { WebDavConfig } from '@renderer/types'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
 
 import { AUTO_SYNC_FILE_NAME } from './AutoSyncService'
@@ -343,7 +343,7 @@ async function getLatestManualBackup(provider: ManualSyncProvider): Promise<Back
 }
 
 async function confirmScheduledRestore(provider: ManualSyncProvider, file: BackupFile) {
-  const providerLabel = i18n.t(`settings.data.manual_schedule.providers.${provider}`)
+  const providerLabel = getManualSyncProviderLabel(provider)
   const modifiedTime = new Date(file.modifiedTime).toLocaleString()
 
   return await new Promise<boolean>((resolve) => {
@@ -362,6 +362,19 @@ async function confirmScheduledRestore(provider: ManualSyncProvider, file: Backu
       onCancel: () => resolve(false)
     })
   })
+}
+
+function getManualSyncProviderLabel(provider: ManualSyncProvider) {
+  switch (provider) {
+    case 'local':
+      return i18n.t('settings.data.manual_schedule.providers.local')
+    case 'nutstore':
+      return i18n.t('settings.data.manual_schedule.providers.nutstore')
+    case 's3':
+      return i18n.t('settings.data.manual_schedule.providers.s3')
+    case 'webdav':
+      return i18n.t('settings.data.manual_schedule.providers.webdav')
+  }
 }
 
 async function getNutstoreWebDavConfig(): Promise<WebDavConfig | null> {

@@ -33,7 +33,7 @@ const Tools = ({ assistant }: ToolsProps) => {
 
   return (
     <HStack alignItems="center" gap={8}>
-      <ManualSyncButtons />
+      {isTopNavbar && <ManualSyncButtons />}
       <SettingsButton assistant={assistant} />
       {isTopNavbar && (
         <Tooltip title={t('navbar.expand')} mouseEnterDelay={0.8}>

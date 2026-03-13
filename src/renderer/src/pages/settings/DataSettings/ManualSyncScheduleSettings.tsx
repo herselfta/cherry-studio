@@ -1,8 +1,8 @@
 import { PlusOutlined } from '@ant-design/icons'
 import { HStack } from '@renderer/components/Layout'
 import {
-  type ManualSyncProvider,
   loadManualSyncSchedule,
+  type ManualSyncProvider,
   normalizeManualSyncScheduleConfig,
   refreshManualSyncSchedules,
   saveManualSyncSchedule

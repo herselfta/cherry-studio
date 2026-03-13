@@ -9,6 +9,7 @@ import { useWebdavBackupModal, WebdavBackupModal } from '@renderer/components/We
 import { useSettings } from '@renderer/hooks/useSettings'
 import { backupToNutstore, restoreFromNutstore } from '@renderer/services/NutstoreService'
 import { useAppSelector } from '@renderer/store'
+import { NUTSTORE_HOST } from '@shared/config/nutstore'
 import { Dropdown, Tooltip } from 'antd'
 import type { ItemType } from 'antd/es/menu/interface'
 import { Download, Upload } from 'lucide-react'
