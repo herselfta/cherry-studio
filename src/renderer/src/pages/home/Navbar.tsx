@@ -18,7 +18,6 @@ import styled from 'styled-components'
 
 import NavbarIcon from '../../components/NavbarIcon'
 import AssistantsDrawer from './components/AssistantsDrawer'
-import ManualSyncButtons from './components/ChatNavBar/Tools/ManualSyncButtons'
 import UpdateAppButton from './components/UpdateAppButton'
 
 interface Props {
@@ -129,7 +128,6 @@ const HeaderNavbar: FC<Props> = ({
         }}
         className="home-navbar-right">
         <HStack alignItems="center" gap={6}>
-          <ManualSyncButtons />
           <UpdateAppButton />
           <Tooltip title={t('chat.assistant.search.placeholder')} mouseEnterDelay={0.8}>
             <NarrowIcon onClick={() => SearchPopup.show()}>

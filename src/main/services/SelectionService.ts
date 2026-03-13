@@ -620,17 +620,65 @@ export class SelectionService {
 
   /**
    * Update toolbar size based on renderer feedback
-   * Only updates width if it has changed
+   * Keep the floating toolbar window in sync with the measured content size
    * @param width New toolbar width
    * @param height New toolbar height
    */
   public determineToolbarSize(width: number, height: number): void {
     const toolbarWidth = Math.ceil(width)
+    const toolbarHeight = Math.ceil(height)
 
-    // only update toolbar width if it's changed
-    if (toolbarWidth > 0 && toolbarWidth !== this.TOOLBAR_WIDTH && height > 0) {
+    let sizeChanged = false
+
+    if (toolbarWidth > 0 && toolbarWidth !== this.TOOLBAR_WIDTH) {
       this.TOOLBAR_WIDTH = toolbarWidth
+      sizeChanged = true
     }
+
+    if (toolbarHeight > 0 && toolbarHeight !== this.TOOLBAR_HEIGHT) {
+      this.TOOLBAR_HEIGHT = toolbarHeight
+      sizeChanged = true
+    }
+
+    if (sizeChanged) {
+      this.resizeToolbarWindow()
+    }
+  }
+
+  private resizeToolbarWindow(): void {
+    if (!this.isToolbarAlive()) {
+      return
+    }
+
+    const currentBounds = this.toolbarWindow!.getBounds()
+    const { toolbarWidth, toolbarHeight } = this.getToolbarRealSize()
+    const centerPoint = {
+      x: Math.round(currentBounds.x + currentBounds.width / 2),
+      y: Math.round(currentBounds.y + currentBounds.height / 2)
+    }
+    const display = screen.getDisplayNearestPoint(centerPoint)
+    const nextX = Math.round(
+      Math.max(
+        display.workArea.x,
+        Math.min(
+          currentBounds.x - (toolbarWidth - currentBounds.width) / 2,
+          display.workArea.x + display.workArea.width - toolbarWidth
+        )
+      )
+    )
+    const nextY = Math.round(
+      Math.max(
+        display.workArea.y,
+        Math.min(currentBounds.y, display.workArea.y + display.workArea.height - toolbarHeight)
+      )
+    )
+
+    this.toolbarWindow!.setBounds({
+      x: nextX,
+      y: nextY,
+      width: toolbarWidth,
+      height: toolbarHeight
+    })
   }
 
   /**

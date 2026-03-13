@@ -1,4 +1,5 @@
 import { render } from '@testing-library/react'
+import type * as ReactI18Next from 'react-i18next'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import SelectionToolbar from '../SelectionToolbar'
@@ -20,7 +21,7 @@ vi.mock('@renderer/hooks/useSettings', () => ({
 }))
 
 vi.mock('react-i18next', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-i18next')>()
+  const actual = await importOriginal<typeof ReactI18Next>()
 
   return {
     ...actual,

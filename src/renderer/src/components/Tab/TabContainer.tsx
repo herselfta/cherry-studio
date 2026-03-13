@@ -10,6 +10,7 @@ import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { getThemeModeLabel, getTitleLabel } from '@renderer/i18n/label'
+import ManualSyncButtons from '@renderer/pages/home/components/ChatNavBar/Tools/ManualSyncButtons'
 import UpdateAppButton from '@renderer/pages/home/components/UpdateAppButton'
 import tabsService from '@renderer/services/TabsService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
@@ -276,6 +277,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
         </HorizontalScrollContainer>
         <RightButtonsContainer style={{ paddingRight: isLinux && useSystemTitleBar ? '12px' : undefined }}>
           <UpdateAppButton />
+          <ManualSyncButtons />
           <Tooltip
             title={t('settings.theme.title') + ': ' + getThemeModeLabel(settedTheme)}
             mouseEnterDelay={0.8}
