@@ -17,10 +17,16 @@ import type { FC } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-const ManualSyncButtons: FC = () => {
+interface ManualSyncButtonsProps {
+  orientation?: 'horizontal' | 'vertical'
+  className?: string
+}
+
+const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizontal', className }) => {
   const { t } = useTranslation()
   const settings = useSettings()
   const { nutstoreToken, nutstorePath } = useAppSelector((state) => state.nutstore)
+  const isVertical = orientation === 'vertical'
 
   const [resolvedLocalBackupDir, setResolvedLocalBackupDir] = useState<string | undefined>(undefined)
   const [backupManagerType, setBackupManagerType] = useState<'webdav' | 'local' | 's3' | 'nutstore' | null>(null)
@@ -182,8 +188,13 @@ const ManualSyncButtons: FC = () => {
 
   return (
     <>
-      <HStack alignItems="center" gap={8}>
-        <Dropdown menu={{ items: uploadItems }} trigger={['click']} placement="bottomRight">
+      <HStack
+        alignItems="center"
+        gap={isVertical ? 6 : 8}
+        className={className}
+        aria-orientation={orientation}
+        style={{ flexDirection: isVertical ? 'column' : 'row' }}>
+        <Dropdown menu={{ items: uploadItems }} trigger={['click']} placement={isVertical ? 'topRight' : 'bottomRight'}>
           <span>
             <Tooltip title={t('settings.data.manual_schedule.quick_actions.upload')} mouseEnterDelay={0.8}>
               <NavbarIcon role="button" aria-label={t('settings.data.manual_schedule.quick_actions.upload')}>
@@ -192,7 +203,7 @@ const ManualSyncButtons: FC = () => {
             </Tooltip>
           </span>
         </Dropdown>
-        <Dropdown menu={{ items: restoreItems }} trigger={['click']} placement="bottomRight">
+        <Dropdown menu={{ items: restoreItems }} trigger={['click']} placement={isVertical ? 'topRight' : 'bottomRight'}>
           <span>
             <Tooltip title={t('settings.data.manual_schedule.quick_actions.restore')} mouseEnterDelay={0.8}>
               <NavbarIcon role="button" aria-label={t('settings.data.manual_schedule.quick_actions.restore')}>

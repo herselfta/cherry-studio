@@ -30,6 +30,7 @@ import {
   Sun
 } from 'lucide-react'
 import type { FC } from 'react'
+import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
@@ -54,6 +55,7 @@ const Sidebar: FC = () => {
   const onEditUser = () => UserPopup.show()
 
   const backgroundColor = useNavBackgroundColor()
+  const sidebarId = useId()
 
   const showPinnedApps = pinned.length > 0 && sidebarIcons.visible.includes('minapp')
 
@@ -67,7 +69,7 @@ const Sidebar: FC = () => {
   return (
     <Container
       $isFullscreen={isFullscreen}
-      id="app-sidebar"
+      id={sidebarId}
       style={{ backgroundColor, zIndex: minappShow ? 10000 : 'initial' }}>
       {isEmoji(avatar) ? (
         <EmojiAvatar onClick={onEditUser} className="sidebar-avatar" size={31} fontSize={18}>
@@ -91,8 +93,8 @@ const Sidebar: FC = () => {
         )}
       </MainMenusContainer>
       <Menus>
-        <ManualSyncButtons />
-        <Tooltip title={t('settings.theme.title') + ': ' + getThemeModeLabel(settedTheme)} placement="right">
+        <ManualSyncButtons orientation="vertical" />
+        <Tooltip title={`${t('settings.theme.title')}: ${getThemeModeLabel(settedTheme)}`} placement="right">
           <Icon theme={theme} onClick={toggleTheme}>
             {settedTheme === ThemeMode.dark ? (
               <Moon size={20} className="icon" />

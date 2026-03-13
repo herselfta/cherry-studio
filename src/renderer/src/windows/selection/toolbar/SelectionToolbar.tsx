@@ -11,7 +11,7 @@ import { defaultLanguage } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
 import { Avatar } from 'antd'
 import { ClipboardCheck, ClipboardCopy, ClipboardX, MessageSquareHeart } from 'lucide-react'
-import { DynamicIcon } from 'lucide-react/dynamic'
+import { DynamicIcon, type IconName } from 'lucide-react/dynamic'
 import type { FC } from 'react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -19,16 +19,6 @@ import type { TextSelectionData } from 'selection-hook'
 import styled from 'styled-components'
 
 const logger = loggerService.withContext('SelectionToolbar')
-
-//tell main the actual size of the content
-const updateWindowSize = () => {
-  const rootElement = document.getElementById('root')
-  if (!rootElement) {
-    logger.error('Root element not found')
-    return
-  }
-  window.api?.selection.determineToolbarSize(rootElement.scrollWidth, rootElement.scrollHeight)
-}
 
 /**
  * ActionIcons is a component that renders the action icons
@@ -94,7 +84,7 @@ const ActionIcons: FC<{
             ) : (
               <DynamicIcon
                 key={action.id}
-                name={action.icon as any}
+                name={action.icon as IconName}
                 className="btn-icon"
                 fallback={() => <MessageSquareHeart className="btn-icon" />}
               />
@@ -121,6 +111,7 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
   const [copyIconStatus, setCopyIconStatus] = useState<'normal' | 'success' | 'fail'>('normal')
   const [copyIconAnimation, setCopyIconAnimation] = useState<'none' | 'enter' | 'exit'>('none')
   const { setTimeoutTimer, clearTimeoutTimer } = useTimer()
+  const resizeAnimationFrameRef = useRef<number | undefined>(undefined)
 
   const realActionItems = useMemo(() => {
     return actionItems?.filter((item) => item.enabled)
@@ -136,6 +127,37 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
     clearTimeoutTimer('textSelection')
     clearTimeoutTimer('copyIcon')
   }, [clearTimeoutTimer])
+
+  const updateWindowSize = useCallback(() => {
+    const containerElement = containerRef.current
+    if (!containerElement) {
+      logger.error('Selection toolbar container not found')
+      return
+    }
+
+    const { width, height } = containerElement.getBoundingClientRect()
+    window.api?.selection.determineToolbarSize(
+      Math.ceil(Math.max(containerElement.scrollWidth, width)),
+      Math.ceil(Math.max(containerElement.scrollHeight, height))
+    )
+  }, [])
+
+  const scheduleWindowSizeUpdate = useCallback(() => {
+    if (demo) {
+      return
+    }
+
+    if (resizeAnimationFrameRef.current) {
+      cancelAnimationFrame(resizeAnimationFrameRef.current)
+    }
+
+    resizeAnimationFrameRef.current = requestAnimationFrame(() => {
+      resizeAnimationFrameRef.current = requestAnimationFrame(() => {
+        resizeAnimationFrameRef.current = undefined
+        updateWindowSize()
+      })
+    })
+  }, [demo, updateWindowSize])
 
   // listen to selectionService events
   useEffect(() => {
@@ -155,6 +177,7 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
           400
         )
         cleanups.push(cleanup)
+        scheduleWindowSizeUpdate()
       }
     )
 
@@ -162,8 +185,9 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
     const toolbarVisibilityChangeListenRemover = window.electron?.ipcRenderer.on(
       IpcChannel.Selection_ToolbarVisibilityChange,
       (_, isVisible: boolean) => {
-        if (!isVisible) {
-          if (!demo) updateWindowSize()
+        if (isVisible) {
+          scheduleWindowSizeUpdate()
+        } else {
           onHideCleanUp()
         }
       }
@@ -174,7 +198,7 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
       toolbarVisibilityChangeListenRemover()
       cleanups.forEach((cleanup) => cleanup())
     }
-  }, [demo, onHideCleanUp, setTimeoutTimer])
+  }, [onHideCleanUp, scheduleWindowSizeUpdate, setTimeoutTimer])
 
   // Keep the toolbar width aligned with the rendered content width.
   useEffect(() => {
@@ -182,12 +206,21 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
       return
     }
 
-    const observer = new ResizeObserver(() => updateWindowSize())
+    const observer = new ResizeObserver(() => scheduleWindowSizeUpdate())
     observer.observe(containerRef.current)
-    updateWindowSize()
+    scheduleWindowSizeUpdate()
 
     return () => observer.disconnect()
-  }, [demo, isCompact, actionItems, language, customCss])
+  }, [actionItems, customCss, demo, isCompact, language, scheduleWindowSizeUpdate])
+
+  useEffect(
+    () => () => {
+      if (resizeAnimationFrameRef.current) {
+        cancelAnimationFrame(resizeAnimationFrameRef.current)
+      }
+    },
+    []
+  )
 
   useEffect(() => {
     !demo && i18n.changeLanguage(language || navigator.language || defaultLanguage)
@@ -336,6 +369,8 @@ const Container = styled.div`
   display: inline-flex;
   flex-direction: row;
   align-items: stretch;
+  width: max-content;
+  min-width: max-content;
   height: var(--selection-toolbar-height);
   border-radius: var(--selection-toolbar-border-radius);
   border: var(--selection-toolbar-border);
