@@ -116,6 +116,7 @@ const ActionIcons: FC<{
 const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
   const { language, customCss } = useSettings()
   const { isCompact, actionItems } = useSelectionAssistant()
+  const containerRef = useRef<HTMLDivElement>(null)
   const [animateKey, setAnimateKey] = useState(0)
   const [copyIconStatus, setCopyIconStatus] = useState<'normal' | 'success' | 'fail'>('normal')
   const [copyIconAnimation, setCopyIconAnimation] = useState<'none' | 'enter' | 'exit'>('none')
@@ -175,10 +176,18 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
     }
   }, [demo, onHideCleanUp, setTimeoutTimer])
 
-  //make sure the toolbar size is updated when the compact mode/actionItems is changed
+  // Keep the toolbar width aligned with the rendered content width.
   useEffect(() => {
-    if (!demo) updateWindowSize()
-  }, [demo, isCompact, actionItems])
+    if (demo || !containerRef.current) {
+      return
+    }
+
+    const observer = new ResizeObserver(() => updateWindowSize())
+    observer.observe(containerRef.current)
+    updateWindowSize()
+
+    return () => observer.disconnect()
+  }, [demo, isCompact, actionItems, language, customCss])
 
   useEffect(() => {
     !demo && i18n.changeLanguage(language || navigator.language || defaultLanguage)
@@ -306,7 +315,7 @@ const SelectionToolbar: FC<{ demo?: boolean }> = ({ demo = false }) => {
   )
 
   return (
-    <Container>
+    <Container ref={containerRef}>
       <LogoWrapper $draggable={!demo}>
         <Logo src={AppLogo} key={animateKey} className="animate" draggable={false} />
       </LogoWrapper>
@@ -393,6 +402,7 @@ const ActionButton = styled.div`
   align-items: center;
   justify-content: center;
   gap: 2px;
+  flex-shrink: 0;
   cursor: pointer !important;
   margin: var(--selection-toolbar-button-margin);
   padding: var(--selection-toolbar-button-padding);
@@ -517,9 +527,7 @@ const ActionIcon = styled.div`
 `
 const ActionTitle = styled.span`
   font-size: var(--selection-toolbar-font-size);
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: var(--selection-toolbar-button-title-max-width);
   white-space: nowrap;
   margin: var(--selection-toolbar-button-text-margin);
   background-color: transparent;

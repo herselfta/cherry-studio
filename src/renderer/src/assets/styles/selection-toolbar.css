@@ -43,6 +43,7 @@ html {
   --selection-toolbar-button-icon-size: 16px; /* default: 16px */
   --selection-toolbar-button-direction: row; /* default: row | column */
   --selection-toolbar-button-text-margin: 0 0 0 0; /* default: 0 0 0 0 */
+  --selection-toolbar-button-title-max-width: none; /* default: none */
   --selection-toolbar-button-margin: 0; /* default: 0 */
   --selection-toolbar-button-padding: 0 8px; /* default: 0 8px */
   --selection-toolbar-button-last-padding: 0 12px 0 8px;
