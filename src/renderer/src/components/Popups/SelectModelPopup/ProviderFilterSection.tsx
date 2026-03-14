@@ -2,7 +2,8 @@ import { ProviderAvatar } from '@renderer/components/ProviderAvatar'
 import type { Provider } from '@renderer/types'
 import { getFancyProviderName } from '@renderer/utils'
 import { Flex } from 'antd'
-import React, { startTransition, useCallback } from 'react'
+import type { FC } from 'react'
+import { startTransition, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -18,7 +19,7 @@ interface ProviderFilterSectionProps {
   onResetProviders: () => void
 }
 
-const ProviderFilterSection: React.FC<ProviderFilterSectionProps> = ({
+const ProviderFilterSection: FC<ProviderFilterSectionProps> = ({
   providers,
   selectedProviderIds,
   onToggleProvider,

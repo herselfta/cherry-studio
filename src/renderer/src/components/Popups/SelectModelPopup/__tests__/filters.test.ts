@@ -2,7 +2,7 @@ import type { Model } from '@renderer/types'
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { useModelTagFilter } from '../filters'
+import { useModelProviderFilter, useModelTagFilter } from '../filters'
 
 const mocks = vi.hoisted(() => ({
   isVisionModel: vi.fn(),
@@ -118,5 +118,52 @@ describe('useModelTagFilter', () => {
     mocks.isVisionModel.mockReturnValueOnce(true)
     mocks.isEmbeddingModel.mockReturnValueOnce(true)
     expect(result.current.tagFilter(model)).toBe(true)
+  })
+})
+
+describe('useModelProviderFilter', () => {
+  it('should show all providers when nothing is selected', () => {
+    const { result } = renderHook(() => useModelProviderFilter())
+
+    expect(result.current.selectedProviderIds).toEqual([])
+    expect(result.current.providerFilter('openai')).toBe(true)
+    expect(result.current.providerFilter('anthropic')).toBe(true)
+  })
+
+  it('should toggle provider selection', () => {
+    const { result } = renderHook(() => useModelProviderFilter())
+
+    act(() => result.current.toggleProvider('openai'))
+    expect(result.current.selectedProviderIds).toEqual(['openai'])
+    expect(result.current.providerFilter('openai')).toBe(true)
+    expect(result.current.providerFilter('anthropic')).toBe(false)
+
+    act(() => result.current.toggleProvider('anthropic'))
+    expect([...result.current.selectedProviderIds].sort()).toEqual(['anthropic', 'openai'])
+    expect(result.current.providerFilter('anthropic')).toBe(true)
+  })
+
+  it('should remove provider when toggled again', () => {
+    const { result } = renderHook(() => useModelProviderFilter())
+
+    act(() => result.current.toggleProvider('openai'))
+    act(() => result.current.toggleProvider('openai'))
+
+    expect(result.current.selectedProviderIds).toEqual([])
+    expect(result.current.providerFilter('anthropic')).toBe(true)
+  })
+
+  it('should reset selected providers', () => {
+    const { result } = renderHook(() => useModelProviderFilter())
+
+    act(() => result.current.toggleProvider('openai'))
+    act(() => result.current.toggleProvider('anthropic'))
+    expect([...result.current.selectedProviderIds].sort()).toEqual(['anthropic', 'openai'])
+
+    act(() => result.current.resetProviders())
+
+    expect(result.current.selectedProviderIds).toEqual([])
+    expect(result.current.providerFilter('openai')).toBe(true)
+    expect(result.current.providerFilter('anthropic')).toBe(true)
   })
 })

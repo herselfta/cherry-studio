@@ -2367,6 +2367,7 @@
     "embedding_model_tooltip": "Add in Settings->Model Provider->Manage",
     "enable_tool_use": "Enable Tool Use",
     "filter": {
+      "by_provider": "Filter by provider",
       "by_tag": "Filter by tag",
       "selected": "Selected tags"
     },
@@ -2399,7 +2400,7 @@
     "rerank_model_support_provider": "Currently, the reranker model only supports some providers ({{provider}})",
     "rerank_model_tooltip": "Click the Manage button in Settings -> Model Services to add.",
     "search": {
-      "placeholder": "Search models...",
+      "placeholder": "Search models or providers...",
       "tooltip": "Search models"
     },
     "stream_output": "Stream output",

@@ -2367,6 +2367,7 @@
     "embedding_model_tooltip": "在设置 -> 模型服务中点击管理按钮添加",
     "enable_tool_use": "工具调用",
     "filter": {
+      "by_provider": "按服务商筛选",
       "by_tag": "按标签筛选",
       "selected": "已选标签"
     },
@@ -2399,7 +2400,7 @@
     "rerank_model_support_provider": "目前重排序模型仅支持部分服务商 ({{provider}})",
     "rerank_model_tooltip": "在设置 -> 模型服务中点击管理按钮添加",
     "search": {
-      "placeholder": "搜索模型...",
+      "placeholder": "搜索模型或服务商...",
       "tooltip": "搜索模型"
     },
     "stream_output": "流式输出",
