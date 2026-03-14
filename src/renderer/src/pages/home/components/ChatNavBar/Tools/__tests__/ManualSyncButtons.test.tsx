@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import type { CSSProperties, HTMLAttributes, PropsWithChildren, ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -67,6 +67,12 @@ vi.mock('@renderer/components/WebdavModals', () => ({
   })
 }))
 
+vi.mock('@renderer/context/ThemeProvider', () => ({
+  useTheme: () => ({
+    theme: 'light'
+  })
+}))
+
 const settingsMocks = vi.hoisted(() => ({
   useSettings: vi.fn()
 }))
@@ -125,5 +131,16 @@ describe('ManualSyncButtons', () => {
     const { container } = render(<ManualSyncButtons orientation="vertical" />)
 
     expect(container.firstChild).toHaveStyle({ flexDirection: 'column' })
+  })
+
+  it('uses sidebar action buttons in vertical mode', () => {
+    render(<ManualSyncButtons orientation="vertical" />)
+
+    const buttons = screen.getAllByRole('button')
+
+    expect(buttons).toHaveLength(2)
+    buttons.forEach((button) => {
+      expect(button).toHaveAttribute('data-variant', 'sidebar')
+    })
   })
 })

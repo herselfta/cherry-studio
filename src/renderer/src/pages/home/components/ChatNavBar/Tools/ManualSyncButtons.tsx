@@ -1,3 +1,4 @@
+import SidebarActionIcon from '@renderer/components/app/SidebarActionIcon'
 import { HStack } from '@renderer/components/Layout'
 import { LocalBackupManager } from '@renderer/components/LocalBackupManager'
 import { LocalBackupModal, useLocalBackupModal } from '@renderer/components/LocalBackupModals'
@@ -6,6 +7,7 @@ import { S3BackupManager } from '@renderer/components/S3BackupManager'
 import { S3BackupModal, useS3BackupModal } from '@renderer/components/S3Modals'
 import { WebdavBackupManager } from '@renderer/components/WebdavBackupManager'
 import { useWebdavBackupModal, WebdavBackupModal } from '@renderer/components/WebdavModals'
+import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { backupToNutstore, restoreFromNutstore } from '@renderer/services/NutstoreService'
 import { useAppSelector } from '@renderer/store'
@@ -14,8 +16,10 @@ import { Dropdown, Tooltip } from 'antd'
 import type { ItemType } from 'antd/es/menu/interface'
 import { Download, Upload } from 'lucide-react'
 import type { FC } from 'react'
+import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { styled } from 'styled-components'
 
 interface ManualSyncButtonsProps {
   orientation?: 'horizontal' | 'vertical'
@@ -24,6 +28,7 @@ interface ManualSyncButtonsProps {
 
 const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizontal', className }) => {
   const { t } = useTranslation()
+  const { theme } = useTheme()
   const settings = useSettings()
   const { nutstoreToken, nutstorePath } = useAppSelector((state) => state.nutstore)
   const isVertical = orientation === 'vertical'
@@ -186,34 +191,46 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
     [isLocalConfigured, isNutstoreConfigured, isS3Configured, isWebdavConfigured, t]
   )
 
+  const renderActionButton = (label: string, icon: ReactNode) => {
+    if (isVertical) {
+      return (
+        <SidebarActionIcon $themeMode={theme} data-variant="sidebar" role="button" aria-label={label}>
+          {icon}
+        </SidebarActionIcon>
+      )
+    }
+
+    return (
+      <NavbarIcon role="button" aria-label={label}>
+        {icon}
+      </NavbarIcon>
+    )
+  }
+
   return (
     <>
       <HStack
         alignItems="center"
-        gap={isVertical ? 6 : 8}
+        gap={isVertical ? 5 : 8}
         className={className}
         aria-orientation={orientation}
         style={{ flexDirection: isVertical ? 'column' : 'row' }}>
         <Dropdown menu={{ items: uploadItems }} trigger={['click']} placement={isVertical ? 'topRight' : 'bottomRight'}>
-          <span>
+          <DropdownTrigger>
             <Tooltip title={t('settings.data.manual_schedule.quick_actions.upload')} mouseEnterDelay={0.8}>
-              <NavbarIcon role="button" aria-label={t('settings.data.manual_schedule.quick_actions.upload')}>
-                <Upload size={18} />
-              </NavbarIcon>
+              {renderActionButton(t('settings.data.manual_schedule.quick_actions.upload'), <Upload size={18} />)}
             </Tooltip>
-          </span>
+          </DropdownTrigger>
         </Dropdown>
         <Dropdown
           menu={{ items: restoreItems }}
           trigger={['click']}
           placement={isVertical ? 'topRight' : 'bottomRight'}>
-          <span>
+          <DropdownTrigger>
             <Tooltip title={t('settings.data.manual_schedule.quick_actions.restore')} mouseEnterDelay={0.8}>
-              <NavbarIcon role="button" aria-label={t('settings.data.manual_schedule.quick_actions.restore')}>
-                <Download size={18} />
-              </NavbarIcon>
+              {renderActionButton(t('settings.data.manual_schedule.quick_actions.restore'), <Download size={18} />)}
             </Tooltip>
-          </span>
+          </DropdownTrigger>
         </Dropdown>
       </HStack>
 
@@ -294,5 +311,12 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
     </>
   )
 }
+
+const DropdownTrigger = styled.span`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  -webkit-app-region: none;
+`
 
 export default ManualSyncButtons

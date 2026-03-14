@@ -2367,6 +2367,7 @@
     "embedding_model_tooltip": "Adaugă în Setări->Furnizor Model->Gestionează",
     "enable_tool_use": "Activează utilizarea instrumentelor",
     "filter": {
+      "by_provider": "[to be translated]:Filter by provider",
       "by_tag": "Filtrează după etichetă",
       "selected": "Etichete selectate"
     },

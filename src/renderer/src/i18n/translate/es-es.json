@@ -2367,6 +2367,7 @@
     "embedding_model_tooltip": "Haga clic en el botón Administrar en Configuración->Servicio de modelos para agregar",
     "enable_tool_use": "Habilitar uso de herramientas",
     "filter": {
+      "by_provider": "[to be translated]:Filter by provider",
       "by_tag": "Filtrar por etiqueta",
       "selected": "Etiquetas seleccionadas"
     },

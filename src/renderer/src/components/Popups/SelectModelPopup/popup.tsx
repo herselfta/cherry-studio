@@ -265,7 +265,8 @@ const PopupContainer: React.FC<Props> = ({
     resolve
   ])
 
-  const shouldShowProviderFilter = showProviderFilter && (providerFilterOptions.length > 1 || selectedProviderIds.length > 0)
+  const shouldShowProviderFilter =
+    showProviderFilter && (providerFilterOptions.length > 1 || selectedProviderIds.length > 0)
   const shouldShowTagFilter = showTagFilter && (availableTags.length > 0 || selectedTags.length > 0)
 
   const listHeight = useMemo(() => {
@@ -305,7 +306,16 @@ const PopupContainer: React.FC<Props> = ({
         })
       }
     }
-  }, [searchText, listItems, modelItems, loading, setFocusedItemKey, listHeight, selectedTags.length, selectedProviderIds])
+  }, [
+    searchText,
+    listItems,
+    modelItems,
+    loading,
+    setFocusedItemKey,
+    listHeight,
+    selectedTags.length,
+    selectedProviderIds
+  ])
 
   const handleItemClick = useCallback(
     (item: FlatListItem) => {

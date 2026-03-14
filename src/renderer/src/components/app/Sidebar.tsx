@@ -39,6 +39,7 @@ import styled from 'styled-components'
 import { OpenClawSidebarIcon } from '../Icons/SVGIcon'
 import UserPopup from '../Popups/UserPopup'
 import { SidebarOpenedMinappTabs, SidebarPinnedApps } from './PinnedMinapps'
+import SidebarActionIcon from './SidebarActionIcon'
 
 const Sidebar: FC = () => {
   const { hideMinappPopup } = useMinappPopup()
@@ -96,15 +97,15 @@ const Sidebar: FC = () => {
       <Menus>
         <ManualSyncButtons orientation="vertical" />
         <Tooltip title={`${t('settings.theme.title')}: ${getThemeModeLabel(settedTheme)}`} placement="right">
-          <Icon theme={theme} onClick={toggleTheme}>
+          <SidebarActionIcon $themeMode={theme} onClick={toggleTheme}>
             {settedTheme === ThemeMode.dark ? (
-              <Moon size={20} className="icon" />
+              <Moon size={18} className="icon" />
             ) : settedTheme === ThemeMode.light ? (
-              <Sun size={20} className="icon" />
+              <Sun size={18} className="icon" />
             ) : (
-              <Monitor size={20} className="icon" />
+              <Monitor size={18} className="icon" />
             )}
-          </Icon>
+          </SidebarActionIcon>
         </Tooltip>
         <Tooltip title={t('settings.title')} mouseEnterDelay={0.8} placement="right">
           <StyledLink
@@ -112,9 +113,11 @@ const Sidebar: FC = () => {
               hideMinappPopup()
               await to('/settings/provider')
             }}>
-            <Icon theme={theme} className={pathname.startsWith('/settings') && !minappShow ? 'active' : ''}>
-              <Settings size={20} className="icon" />
-            </Icon>
+            <SidebarActionIcon
+              $themeMode={theme}
+              className={pathname.startsWith('/settings') && !minappShow ? 'active' : ''}>
+              <Settings size={18} className="icon" />
+            </SidebarActionIcon>
           </StyledLink>
         </Tooltip>
       </Menus>
