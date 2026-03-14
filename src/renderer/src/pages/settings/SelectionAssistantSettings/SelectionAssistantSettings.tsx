@@ -4,7 +4,7 @@ import { useSelectionAssistant } from '@renderer/hooks/useSelectionAssistant'
 import { getSelectionDescriptionLabel } from '@renderer/i18n/label'
 import type { FilterMode, TriggerMode } from '@renderer/types/selectionTypes'
 import SelectionToolbar from '@renderer/windows/selection/toolbar/SelectionToolbar'
-import { Button, Radio, Row, Slider, Switch, Tooltip } from 'antd'
+import { Alert, Button, Radio, Row, Slider, Switch, Tooltip } from 'antd'
 import { CircleHelp, Edit2 } from 'lucide-react'
 import type { FC } from 'react'
 import { useEffect, useState } from 'react'
@@ -27,7 +27,7 @@ import SelectionFilterListModal from './components/SelectionFilterListModal'
 
 const SelectionAssistantSettings: FC = () => {
   const { theme } = useTheme()
-  const { t } = useTranslation()
+  const { i18n, t } = useTranslation()
   const {
     selectionEnabled,
     triggerMode,
@@ -57,6 +57,9 @@ const SelectionAssistantSettings: FC = () => {
 
   const [isFilterListModalOpen, setIsFilterListModalOpen] = useState(false)
   const [isMacTrustModalOpen, setIsMacTrustModalOpen] = useState(false)
+  const [macCodeSignatureInfo, setMacCodeSignatureInfo] = useState<Awaited<
+    ReturnType<typeof window.api.mac.getCodeSignatureInfo>
+  > | null>(null)
   const [opacityValue, setOpacityValue] = useState(actionWindowOpacity)
 
   // force disable selection assistant on non-windows systems
@@ -76,6 +79,31 @@ const SelectionAssistantSettings: FC = () => {
     }
   }, [isSupportedOS, selectionEnabled, setSelectionEnabled])
 
+  useEffect(() => {
+    if (!isMac) {
+      return
+    }
+
+    let isMounted = true
+
+    window.api.mac
+      .getCodeSignatureInfo()
+      .then((info) => {
+        if (isMounted) {
+          setMacCodeSignatureInfo(info)
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setMacCodeSignatureInfo(null)
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   const handleEnableCheckboxChange = async (checked: boolean) => {
     if (!isSupportedOS) return
 
@@ -89,6 +117,11 @@ const SelectionAssistantSettings: FC = () => {
 
     setSelectionEnabled(checked)
   }
+
+  const showAdhocSigningWarning = isMac && macCodeSignatureInfo?.kind === 'adhoc'
+  const macSigningGuideUrl = i18n.language.startsWith('zh')
+    ? 'https://github.com/CherryHQ/cherry-studio/blob/main/docs/zh/guides/development.md#macos-local-signing'
+    : 'https://github.com/CherryHQ/cherry-studio/blob/main/docs/en/guides/development.md#macos-local-signing'
 
   return (
     <SettingContainer theme={theme}>
@@ -105,6 +138,25 @@ const SelectionAssistantSettings: FC = () => {
           {isMac && <ExperimentalText>{t('selection.settings.experimental')}</ExperimentalText>}
         </Row>
         <SettingDivider />
+        {showAdhocSigningWarning && (
+          <>
+            <Alert
+              type="warning"
+              showIcon
+              message={t('selection.settings.enable.mac_code_sign_warning.title')}
+              description={t('selection.settings.enable.mac_code_sign_warning.description', {
+                identity: macCodeSignatureInfo?.signingIdentity || 'adhoc'
+              })}
+              action={
+                <Button size="small" type="link" onClick={() => window.api.openWebsite(macSigningGuideUrl)}>
+                  {t('selection.settings.enable.mac_code_sign_warning.button.open_signing_guide')}
+                </Button>
+              }
+              style={{ marginBottom: 12 }}
+            />
+            <SettingDivider />
+          </>
+        )}
         <SettingRow>
           <SettingLabel>
             <SettingRowTitle>{t('selection.settings.enable.title')}</SettingRowTitle>

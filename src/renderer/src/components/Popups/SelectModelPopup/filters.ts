@@ -13,6 +13,16 @@ import { useCallback, useMemo, useState } from 'react'
 
 type ModelPredict = (m: Model) => boolean
 
+export const MODEL_TAGS: ModelTag[] = [
+  'vision',
+  'embedding',
+  'reasoning',
+  'function_calling',
+  'web_search',
+  'rerank',
+  'free'
+]
+
 const initialTagSelection: Record<ModelTag, boolean> = {
   vision: false,
   embedding: false,
@@ -76,5 +86,37 @@ export function useModelTagFilter() {
     tagFilter,
     toggleTag,
     resetTags
+  }
+}
+
+/**
+ * 服务商筛选 hook，默认未选中时表示显示全部服务商
+ */
+export function useModelProviderFilter() {
+  const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>([])
+
+  const toggleProvider = useCallback((providerId: string) => {
+    setSelectedProviderIds((prev) =>
+      prev.includes(providerId) ? prev.filter((id) => id !== providerId) : [...prev, providerId]
+    )
+  }, [])
+
+  const resetProviders = useCallback(() => {
+    setSelectedProviderIds([])
+  }, [])
+
+  const providerFilter = useCallback(
+    (providerId: string) => {
+      if (selectedProviderIds.length === 0) return true
+      return selectedProviderIds.includes(providerId)
+    },
+    [selectedProviderIds]
+  )
+
+  return {
+    selectedProviderIds,
+    providerFilter,
+    toggleProvider,
+    resetProviders
   }
 }

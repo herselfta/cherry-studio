@@ -3417,6 +3417,13 @@
       },
       "enable": {
         "description": "目前僅支援 Windows & macOS",
+        "mac_code_sign_warning": {
+          "button": {
+            "open_signing_guide": "查看簽名說明"
+          },
+          "description": "目前這個建置使用的是 ad hoc 簽名（{{identity}}）。每次用新的 .app 取代後，macOS 用來識別輔助使用權限的應用程式身分都會改變，因此劃詞助手會在更新後失去權限。請改用穩定的簽名身分重新打包，才能保留該權限。",
+          "title": "目前建置會在更新後重設輔助使用權限"
+        },
         "mac_process_trust_hint": {
           "button": {
             "go_to_settings": "前往設定",
@@ -3646,6 +3653,35 @@
         "button": "開啟日誌",
         "label": "應用程式日誌"
       },
+      "auto_sync": {
+        "help": "按設定間隔自動建立新的備份並上傳到目前儲存位置，不會自動拉取或恢復遠端資料。",
+        "interval": {
+          "hour_one": "每 {{count}} 小時",
+          "hour_other": "每 {{count}} 小時",
+          "label": "備份間隔",
+          "minute_one": "每 {{count}} 分鐘",
+          "minute_other": "每 {{count}} 分鐘",
+          "placeholder": "選擇間隔"
+        },
+        "label": "自動備份",
+        "manual": {
+          "help": "需要時手動建立歷史快照或從歷史快照恢復資料。",
+          "label": "手動備份與恢復"
+        },
+        "messages": {
+          "conflict": "檢測到本機和遠端同時發生變更，請先處理衝突後再繼續同步。",
+          "failed": "自動備份失敗"
+        },
+        "requiresSetup": "完成目前儲存配置後即可開啟自動備份。",
+        "status": {
+          "error": "備份異常",
+          "label": "備份狀態",
+          "lastSync": "上次備份：{{time}}",
+          "pending": "已開啟，等待首次備份",
+          "syncing": "正在備份",
+          "unavailable": "完成配置後可查看備份狀態"
+        }
+      },
       "backup": {
         "skip_file_data_help": "備份時跳過圖片、知識庫等資料檔案，只備份聊天記錄與設定。可減少空間佔用並加快備份速度",
         "skip_file_data_title": "精簡備份"
@@ -3851,6 +3887,39 @@
         "syncError": "備份錯誤",
         "syncStatus": "備份狀態",
         "title": "本機目錄"
+      },
+      "manual_schedule": {
+        "confirm_before_restore": {
+          "help": "開啟後，定時還原會先顯示確認視窗，展示即將還原的最新備份對象；關閉後會直接還原。",
+          "label": "還原前確認"
+        },
+        "empty": "尚未設定時刻",
+        "help": "每天會在這些固定時刻執行上傳。還原會選取目前儲存中的最新手動備份。",
+        "providers": {
+          "local": "本機目錄",
+          "nutstore": "堅果雲",
+          "s3": "S3 相容儲存",
+          "webdav": "WebDAV"
+        },
+        "quick_actions": {
+          "restore": "還原備份",
+          "upload": "上傳備份"
+        },
+        "requires_setup": "可以先設定固定時刻，等目前儲存配置完成後，排程就會開始生效。",
+        "restore_confirm": {
+          "confirm": "確認還原",
+          "content": "排程任務準備從 {{provider}} 還原最新備份：{{fileName}}。修改時間：{{modifiedTime}}，大小：{{size}} 位元組。確認後將覆寫目前資料。",
+          "title": "確認定時還原"
+        },
+        "restore_times": {
+          "aria": "定時還原時刻",
+          "help": "到點後會選取目前儲存中最新的一份手動備份進行還原。",
+          "label": "定時還原時刻"
+        },
+        "upload_times": {
+          "aria": "定時上傳時刻",
+          "label": "定時上傳時刻"
+        }
       },
       "markdown_export": {
         "exclude_citations": {
@@ -4216,68 +4285,6 @@
         "title": "語雀設定",
         "token": "語雀 Token",
         "token_placeholder": "請輸入語雀 Token"
-      },
-      "auto_sync": {
-        "help": "按設定間隔自動建立新的備份並上傳到目前儲存位置，不會自動拉取或恢復遠端資料。",
-        "interval": {
-          "hour_one": "每 {{count}} 小時",
-          "hour_other": "每 {{count}} 小時",
-          "label": "備份間隔",
-          "minute_one": "每 {{count}} 分鐘",
-          "minute_other": "每 {{count}} 分鐘",
-          "placeholder": "選擇間隔"
-        },
-        "label": "自動備份",
-        "manual": {
-          "help": "需要時手動建立歷史快照或從歷史快照恢復資料。",
-          "label": "手動備份與恢復"
-        },
-        "messages": {
-          "conflict": "檢測到本機和遠端同時發生變更，請先處理衝突後再繼續同步。",
-          "failed": "自動備份失敗"
-        },
-        "requiresSetup": "完成目前儲存配置後即可開啟自動備份。",
-        "status": {
-          "error": "備份異常",
-          "label": "備份狀態",
-          "lastSync": "上次備份：{{time}}",
-          "pending": "已開啟，等待首次備份",
-          "syncing": "正在備份",
-          "unavailable": "完成配置後可查看備份狀態"
-        }
-      },
-      "manual_schedule": {
-        "confirm_before_restore": {
-          "help": "開啟後，定時還原會先顯示確認視窗，展示即將還原的最新備份對象；關閉後會直接還原。",
-          "label": "還原前確認"
-        },
-        "empty": "尚未設定時刻",
-        "help": "每天會在這些固定時刻執行上傳。還原會選取目前儲存中的最新手動備份。",
-        "providers": {
-          "local": "本機目錄",
-          "nutstore": "堅果雲",
-          "s3": "S3 相容儲存",
-          "webdav": "WebDAV"
-        },
-        "quick_actions": {
-          "restore": "還原備份",
-          "upload": "上傳備份"
-        },
-        "requires_setup": "可以先設定固定時刻，等目前儲存配置完成後，排程就會開始生效。",
-        "restore_confirm": {
-          "confirm": "確認還原",
-          "content": "排程任務準備從 {{provider}} 還原最新備份：{{fileName}}。修改時間：{{modifiedTime}}，大小：{{size}} 位元組。確認後將覆寫目前資料。",
-          "title": "確認定時還原"
-        },
-        "restore_times": {
-          "aria": "定時還原時刻",
-          "help": "到點後會選取目前儲存中最新的一份手動備份進行還原。",
-          "label": "定時還原時刻"
-        },
-        "upload_times": {
-          "aria": "定時上傳時刻",
-          "label": "定時上傳時刻"
-        }
       }
     },
     "developer": {

@@ -28,10 +28,10 @@ vi.mock('react-i18next', async (importOriginal) => {
     useTranslation: () => ({
       t: (key: string) =>
         (
-          {
+          ({
             'selection.action.builtin.copy': 'Copy',
             'selection.action.builtin.quote': 'Quote Selected Text Into Current Conversation'
-          } as Record<string, string>
+          }) as Record<string, string>
         )[key] ?? key
     })
   }

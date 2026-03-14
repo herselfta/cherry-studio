@@ -3417,6 +3417,13 @@
       },
       "enable": {
         "description": "Derzeit nur Windows & macOS unterstützt",
+        "mac_code_sign_warning": {
+          "button": {
+            "open_signing_guide": "Open Signing Guide"
+          },
+          "description": "This build is ad hoc-signed ({{identity}}). Replacing it with a new .app changes the app identity macOS uses for Accessibility, so Selection Assistant will lose permission after updates. Rebuild with a stable signing identity to keep the permission.",
+          "title": "Current build will reset Accessibility permission after updates"
+        },
         "mac_process_trust_hint": {
           "button": {
             "go_to_settings": "Zu Einstellungen",

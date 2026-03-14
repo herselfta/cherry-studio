@@ -3417,6 +3417,13 @@
       },
       "enable": {
         "description": "Currently only supported on Windows & macOS",
+        "mac_code_sign_warning": {
+          "button": {
+            "open_signing_guide": "Open Signing Guide"
+          },
+          "description": "This build is ad hoc-signed ({{identity}}). Replacing it with a new .app changes the app identity macOS uses for Accessibility, so Selection Assistant will lose permission after updates. Rebuild with a stable signing identity to keep the permission.",
+          "title": "Current build will reset Accessibility permission after updates"
+        },
         "mac_process_trust_hint": {
           "button": {
             "go_to_settings": "Go to Settings",
@@ -3646,6 +3653,35 @@
         "button": "Open Logs",
         "label": "App Logs"
       },
+      "auto_sync": {
+        "help": "Automatically creates a new backup on the selected interval and uploads it to the current storage target. It does not pull or restore remote data automatically.",
+        "interval": {
+          "hour_one": "Every {{count}} hour",
+          "hour_other": "Every {{count}} hours",
+          "label": "Backup Interval",
+          "minute_one": "Every {{count}} minute",
+          "minute_other": "Every {{count}} minutes",
+          "placeholder": "Select interval"
+        },
+        "label": "Automatic Backup",
+        "manual": {
+          "help": "Create snapshots on demand or restore from a previous snapshot when needed.",
+          "label": "Manual Backup & Restore"
+        },
+        "messages": {
+          "conflict": "A sync conflict was detected because local and remote data changed at the same time. Resolve the conflict before syncing again.",
+          "failed": "Automatic backup failed"
+        },
+        "requiresSetup": "Complete this storage configuration to enable automatic backup.",
+        "status": {
+          "error": "Backup Issue",
+          "label": "Backup Status",
+          "lastSync": "Last backup: {{time}}",
+          "pending": "Enabled, waiting for the first backup",
+          "syncing": "Backing up",
+          "unavailable": "Finish setup to view backup status"
+        }
+      },
       "backup": {
         "skip_file_data_help": "Skip backing up data files such as pictures and knowledge bases during backup, and only back up chat records and settings. Reduce space occupancy and speed up the backup speed.",
         "skip_file_data_title": "Slim Backup"
@@ -3851,6 +3887,39 @@
         "syncError": "Backup Error",
         "syncStatus": "Backup Status",
         "title": "Local Directory"
+      },
+      "manual_schedule": {
+        "confirm_before_restore": {
+          "help": "When enabled, scheduled restores show a confirmation dialog with the latest backup target before any data is replaced. When disabled, restores start immediately.",
+          "label": "Confirm Before Restore"
+        },
+        "empty": "No times configured",
+        "help": "Uploads run every day at the selected times. Restores always pick the latest manual backup from the current storage.",
+        "providers": {
+          "local": "Local Directory",
+          "nutstore": "Nutstore",
+          "s3": "S3 Compatible Storage",
+          "webdav": "WebDAV"
+        },
+        "quick_actions": {
+          "restore": "Restore Backup",
+          "upload": "Upload Backup"
+        },
+        "requires_setup": "You can set daily times now. The schedule will start working after this storage is fully configured.",
+        "restore_confirm": {
+          "confirm": "Restore Now",
+          "content": "A scheduled task is ready to restore the latest backup from {{provider}}: {{fileName}}. Modified: {{modifiedTime}}. Size: {{size}} bytes. Confirming will overwrite your current data.",
+          "title": "Confirm Scheduled Restore"
+        },
+        "restore_times": {
+          "aria": "Scheduled restore times",
+          "help": "When a restore time arrives, the app restores the latest manual backup available in this storage.",
+          "label": "Scheduled Restore Times"
+        },
+        "upload_times": {
+          "aria": "Scheduled upload times",
+          "label": "Scheduled Upload Times"
+        }
       },
       "markdown_export": {
         "exclude_citations": {
@@ -4216,68 +4285,6 @@
         "title": "Yuque Configuration",
         "token": "Yuque Token",
         "token_placeholder": "Please enter the Yuque Token"
-      },
-      "auto_sync": {
-        "help": "Automatically creates a new backup on the selected interval and uploads it to the current storage target. It does not pull or restore remote data automatically.",
-        "interval": {
-          "hour_one": "Every {{count}} hour",
-          "hour_other": "Every {{count}} hours",
-          "label": "Backup Interval",
-          "minute_one": "Every {{count}} minute",
-          "minute_other": "Every {{count}} minutes",
-          "placeholder": "Select interval"
-        },
-        "label": "Automatic Backup",
-        "manual": {
-          "help": "Create snapshots on demand or restore from a previous snapshot when needed.",
-          "label": "Manual Backup & Restore"
-        },
-        "messages": {
-          "conflict": "A sync conflict was detected because local and remote data changed at the same time. Resolve the conflict before syncing again.",
-          "failed": "Automatic backup failed"
-        },
-        "requiresSetup": "Complete this storage configuration to enable automatic backup.",
-        "status": {
-          "error": "Backup Issue",
-          "label": "Backup Status",
-          "lastSync": "Last backup: {{time}}",
-          "pending": "Enabled, waiting for the first backup",
-          "syncing": "Backing up",
-          "unavailable": "Finish setup to view backup status"
-        }
-      },
-      "manual_schedule": {
-        "confirm_before_restore": {
-          "help": "When enabled, scheduled restores show a confirmation dialog with the latest backup target before any data is replaced. When disabled, restores start immediately.",
-          "label": "Confirm Before Restore"
-        },
-        "empty": "No times configured",
-        "help": "Uploads run every day at the selected times. Restores always pick the latest manual backup from the current storage.",
-        "providers": {
-          "local": "Local Directory",
-          "nutstore": "Nutstore",
-          "s3": "S3 Compatible Storage",
-          "webdav": "WebDAV"
-        },
-        "quick_actions": {
-          "restore": "Restore Backup",
-          "upload": "Upload Backup"
-        },
-        "requires_setup": "You can set daily times now. The schedule will start working after this storage is fully configured.",
-        "restore_confirm": {
-          "confirm": "Restore Now",
-          "content": "A scheduled task is ready to restore the latest backup from {{provider}}: {{fileName}}. Modified: {{modifiedTime}}. Size: {{size}} bytes. Confirming will overwrite your current data.",
-          "title": "Confirm Scheduled Restore"
-        },
-        "restore_times": {
-          "aria": "Scheduled restore times",
-          "help": "When a restore time arrives, the app restores the latest manual backup available in this storage.",
-          "label": "Scheduled Restore Times"
-        },
-        "upload_times": {
-          "aria": "Scheduled upload times",
-          "label": "Scheduled Upload Times"
-        }
       }
     },
     "developer": {

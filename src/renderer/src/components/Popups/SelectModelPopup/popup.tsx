@@ -28,7 +28,8 @@ import React, {
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
-import { useModelTagFilter } from './filters'
+import { MODEL_TAGS, useModelProviderFilter, useModelTagFilter } from './filters'
+import ProviderFilterSection from './ProviderFilterSection'
 import SelectModelSearchBar from './searchbar'
 import TagFilterSection from './TagFilterSection'
 import type { FlatListItem, FlatListModel } from './types'
@@ -42,6 +43,8 @@ interface PopupParams {
   filter?: (model: Model) => boolean
   /** Show tag filter section */
   showTagFilter?: boolean
+  /** Show provider filter section */
+  showProviderFilter?: boolean
 }
 
 interface Props extends PopupParams {
@@ -52,7 +55,13 @@ export type FilterType = Exclude<ModelType, 'text'> | 'free'
 
 // const logger = loggerService.withContext('SelectModelPopup')
 
-const PopupContainer: React.FC<Props> = ({ model, filter: baseFilter, showTagFilter = true, resolve }) => {
+const PopupContainer: React.FC<Props> = ({
+  model,
+  filter: baseFilter,
+  showTagFilter = true,
+  showProviderFilter = true,
+  resolve
+}) => {
   const { t } = useTranslation()
   const { providers } = useProviders()
   const { pinnedModels, togglePinnedModel, loading } = usePinnedModels()
@@ -76,19 +85,18 @@ const PopupContainer: React.FC<Props> = ({ model, filter: baseFilter, showTagFil
   }, [])
 
   const { tagSelection, selectedTags, tagFilter, toggleTag } = useModelTagFilter()
+  const { selectedProviderIds, providerFilter, toggleProvider, resetProviders } = useModelProviderFilter()
 
-  // 计算要显示的可用标签列表
-  const availableTags = useMemo(() => {
-    const models = providers.flatMap((p) => p.models).filter(baseFilter ?? (() => true))
-    return objectEntries(getModelTags(models))
-      .filter(([, state]) => state)
-      .map(([tag]) => tag)
-  }, [providers, baseFilter])
+  const modelSearchFilter = useCallback(
+    (candidate: Model) => {
+      return baseFilter === undefined || baseFilter(candidate)
+    },
+    [baseFilter]
+  )
 
-  // 根据输入的文本筛选模型
   const searchFilter = useCallback(
     (provider: Provider) => {
-      let models = provider.models
+      let models = provider.models.filter(modelSearchFilter)
 
       if (searchText.trim()) {
         models = filterModelsByKeywords(searchText, models, provider)
@@ -96,8 +104,47 @@ const PopupContainer: React.FC<Props> = ({ model, filter: baseFilter, showTagFil
 
       return sortBy(models, ['group', 'name'])
     },
-    [searchText]
+    [searchText, modelSearchFilter]
   )
+
+  const providerModelGroups = useMemo(
+    () => providers.map((provider) => ({ provider, models: searchFilter(provider) })),
+    [providers, searchFilter]
+  )
+
+  // 计算要显示的可用标签列表
+  const availableTags = useMemo(() => {
+    const models = providerModelGroups
+      .filter(({ provider }) => !showProviderFilter || providerFilter(provider.id))
+      .flatMap(({ models }) => models)
+    const tagSet = new Set(
+      objectEntries(getModelTags(models))
+        .filter(([, state]) => state)
+        .map(([tag]) => tag)
+    )
+
+    selectedTags.forEach((tag) => tagSet.add(tag))
+
+    return MODEL_TAGS.filter((tag) => tagSet.has(tag))
+  }, [providerModelGroups, providerFilter, selectedTags, showProviderFilter])
+
+  const providerFilterOptions = useMemo(() => {
+    const counts = new Map<string, number>()
+
+    providerModelGroups.forEach(({ provider, models }) => {
+      const count = models.filter((model) => !showTagFilter || tagFilter(model)).length
+      if (count > 0 || selectedProviderIds.includes(provider.id)) {
+        counts.set(provider.id, count)
+      }
+    })
+
+    return providers
+      .filter((provider) => counts.has(provider.id))
+      .map((provider) => ({
+        provider,
+        count: counts.get(provider.id) ?? 0
+      }))
+  }, [providerModelGroups, providers, selectedProviderIds, showTagFilter, tagFilter])
 
   // 创建模型列表项
   const createModelItem = useCallback(
@@ -140,19 +187,19 @@ const PopupContainer: React.FC<Props> = ({ model, filter: baseFilter, showTagFil
   const { listItems, modelItems } = useMemo(() => {
     const items: FlatListItem[] = []
     const pinnedModelIds = new Set(pinnedModels)
-    const finalModelFilter = (model: Model) => {
+    const finalModelFilter = (providerId: string, model: Model) => {
       const _tagFilter = !showTagFilter || tagFilter(model)
-      const _baseFilter = baseFilter === undefined || baseFilter(model)
-      return _tagFilter && _baseFilter
+      const _providerFilter = !showProviderFilter || providerFilter(providerId)
+      return _tagFilter && _providerFilter
     }
 
     // 添加置顶模型分组（仅在无搜索文本时）
     if (searchText.length === 0 && pinnedModelIds.size > 0) {
-      const pinnedItems = providers.flatMap((p) =>
-        p.models
+      const pinnedItems = providerModelGroups.flatMap(({ provider, models }) =>
+        models
           .filter((m) => pinnedModelIds.has(getModelUniqId(m)))
-          .filter(finalModelFilter)
-          .map((m) => createModelItem(m, p, true))
+          .filter((m) => finalModelFilter(provider.id, m))
+          .map((m) => createModelItem(m, provider, true))
       )
 
       if (pinnedItems.length > 0) {
@@ -169,19 +216,19 @@ const PopupContainer: React.FC<Props> = ({ model, filter: baseFilter, showTagFil
     }
 
     // 添加常规模型分组
-    providers.forEach((p) => {
-      const filteredModels = searchFilter(p)
+    providerModelGroups.forEach(({ provider, models }) => {
+      const filteredModels = models
         .filter((m) => searchText.length > 0 || !pinnedModelIds.has(getModelUniqId(m)))
-        .filter(finalModelFilter)
+        .filter((m) => finalModelFilter(provider.id, m))
 
       if (filteredModels.length === 0) return
 
       // 添加 provider 分组标题
       items.push({
-        key: `provider-${p.id}`,
+        key: `provider-${provider.id}`,
         type: 'group',
-        name: getFancyProviderName(p),
-        actions: p.id !== 'cherryai' && (
+        name: getFancyProviderName(provider),
+        actions: provider.id !== 'cherryai' && (
           <Tooltip title={t('navigate.provider_settings')} mouseEnterDelay={0.5} mouseLeaveDelay={0}>
             <Settings2
               size={12}
@@ -191,7 +238,7 @@ const PopupContainer: React.FC<Props> = ({ model, filter: baseFilter, showTagFil
                 e.stopPropagation()
                 setOpen(false)
                 resolve(undefined)
-                window.navigate(`/settings/provider?id=${p.id}`)
+                window.navigate(`/settings/provider?id=${provider.id}`)
               }}
             />
           </Tooltip>
@@ -199,7 +246,7 @@ const PopupContainer: React.FC<Props> = ({ model, filter: baseFilter, showTagFil
         isSelected: false
       })
 
-      items.push(...filteredModels.map((m) => createModelItem(m, p, pinnedModelIds.has(getModelUniqId(m)))))
+      items.push(...filteredModels.map((m) => createModelItem(m, provider, pinnedModelIds.has(getModelUniqId(m)))))
     })
 
     // 获取可选择的模型项（过滤掉分组标题）
@@ -208,15 +255,18 @@ const PopupContainer: React.FC<Props> = ({ model, filter: baseFilter, showTagFil
   }, [
     pinnedModels,
     searchText.length,
-    providers,
+    providerModelGroups,
     showTagFilter,
+    showProviderFilter,
     tagFilter,
-    baseFilter,
+    providerFilter,
     createModelItem,
     t,
-    searchFilter,
     resolve
   ])
+
+  const shouldShowProviderFilter = showProviderFilter && (providerFilterOptions.length > 1 || selectedProviderIds.length > 0)
+  const shouldShowTagFilter = showTagFilter && (availableTags.length > 0 || selectedTags.length > 0)
 
   const listHeight = useMemo(() => {
     return Math.min(PAGE_SIZE, listItems.length) * ITEM_HEIGHT
@@ -233,8 +283,8 @@ const PopupContainer: React.FC<Props> = ({ model, filter: baseFilter, showTagFil
 
     let targetItemKey: string | undefined
 
-    // 启动搜索或 tag 筛选时，滚动到第一个 item
-    if (searchText || selectedTags.length > 0) {
+    // 启动搜索或任意筛选时，滚动到第一个 item
+    if (searchText || selectedTags.length > 0 || selectedProviderIds.length > 0) {
       targetItemKey = modelItems[0]?.key
     }
     // 初始加载或清空搜索时，滚动到 selected item
@@ -255,7 +305,7 @@ const PopupContainer: React.FC<Props> = ({ model, filter: baseFilter, showTagFil
         })
       }
     }
-  }, [searchText, listItems, modelItems, loading, setFocusedItemKey, listHeight, selectedTags.length])
+  }, [searchText, listItems, modelItems, loading, setFocusedItemKey, listHeight, selectedTags.length, selectedProviderIds])
 
   const handleItemClick = useCallback(
     (item: FlatListItem) => {
@@ -426,7 +476,18 @@ const PopupContainer: React.FC<Props> = ({ model, filter: baseFilter, showTagFil
       {/* 搜索框 */}
       <SelectModelSearchBar onSearch={setSearchText} />
       <Divider style={{ margin: 0, marginTop: 4, borderBlockStartWidth: 0.5 }} />
-      {showTagFilter && (
+      {shouldShowProviderFilter && (
+        <>
+          <ProviderFilterSection
+            providers={providerFilterOptions}
+            selectedProviderIds={selectedProviderIds}
+            onToggleProvider={toggleProvider}
+            onResetProviders={resetProviders}
+          />
+          <Divider style={{ margin: 0, borderBlockStartWidth: 0.5 }} />
+        </>
+      )}
+      {shouldShowTagFilter && (
         <>
           <TagFilterSection availableTags={availableTags} tagSelection={tagSelection} onToggleTag={toggleTag} />
           <Divider style={{ margin: 0, borderBlockStartWidth: 0.5 }} />

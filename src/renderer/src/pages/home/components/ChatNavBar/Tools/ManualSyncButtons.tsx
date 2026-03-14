@@ -203,7 +203,10 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
             </Tooltip>
           </span>
         </Dropdown>
-        <Dropdown menu={{ items: restoreItems }} trigger={['click']} placement={isVertical ? 'topRight' : 'bottomRight'}>
+        <Dropdown
+          menu={{ items: restoreItems }}
+          trigger={['click']}
+          placement={isVertical ? 'topRight' : 'bottomRight'}>
           <span>
             <Tooltip title={t('settings.data.manual_schedule.quick_actions.restore')} mouseEnterDelay={0.8}>
               <NavbarIcon role="button" aria-label={t('settings.data.manual_schedule.quick_actions.restore')}>

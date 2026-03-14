@@ -5,15 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ManualSyncButtons from '../ManualSyncButtons'
 
 vi.mock('@renderer/components/Layout', () => ({
-  HStack: ({
-    children,
-    className,
-    style
-  }: {
-    children: ReactNode
-    className?: string
-    style?: CSSProperties
-  }) => (
+  HStack: ({ children, className, style }: { children: ReactNode; className?: string; style?: CSSProperties }) => (
     <div className={className} style={style}>
       {children}
     </div>
