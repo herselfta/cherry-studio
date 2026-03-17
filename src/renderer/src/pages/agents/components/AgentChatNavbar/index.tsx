@@ -34,7 +34,7 @@ const AgentChatNavbar = ({ activeAgent, className }: Props) => {
   })
 
   return (
-    <NavbarHeader className={cn('agent-navbar h-(--navbar-height)', className)}>
+    <NavbarHeader className={cn('agent-navbar', className)} style={{ height: 'var(--navbar-height)' }}>
       <div className="flex h-full min-w-0 flex-1 shrink items-center overflow-auto">
         <AgentContent activeAgent={activeAgent} />
       </div>

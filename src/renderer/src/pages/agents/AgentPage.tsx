@@ -8,7 +8,7 @@ import { useShowAssistants, useShowTopics } from '@renderer/hooks/useStore'
 import { cn } from '@renderer/utils'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, SECOND_MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { AnimatePresence, motion } from 'motion/react'
-import type { PropsWithChildren } from 'react'
+import type { CSSProperties, PropsWithChildren } from 'react'
 import { useEffect } from 'react'
 
 import AgentChat from './AgentChat'
@@ -17,7 +17,7 @@ import AgentSidePanel from './AgentSidePanel'
 import { AgentEmpty, AgentServerDisabled, AgentServerStopped } from './components/status'
 
 const AgentPage = () => {
-  const { isLeftNavbar } = useNavbarPosition()
+  const { isLeftNavbar, isTopNavbar } = useNavbarPosition()
   const { showAssistants } = useShowAssistants()
   const { showTopics } = useShowTopics()
   const { topicPosition } = useSettings()
@@ -26,8 +26,11 @@ const AgentPage = () => {
   const { agents } = useAgents()
   const { setActiveAgentId } = useActiveAgent()
   const { apiServerConfig, apiServerRunning, apiServerLoading } = useApiServer()
+  const containerStyle: CSSProperties = {
+    maxWidth: isLeftNavbar ? 'calc(100vw - var(--sidebar-width))' : '100vw'
+  }
 
-  // Auto-select first agent when none is active
+  // Auto-select first agent when none is active.
   useEffect(() => {
     if (!activeAgentId && agents && agents.length > 0) {
       setActiveAgentId(agents[0].id)
@@ -44,7 +47,7 @@ const AgentPage = () => {
 
   if (!apiServerConfig.enabled) {
     return (
-      <Container className="bg-background">
+      <Container className="bg-background" style={containerStyle}>
         <AgentServerDisabled />
       </Container>
     )
@@ -52,7 +55,7 @@ const AgentPage = () => {
 
   if (!apiServerLoading && !apiServerRunning) {
     return (
-      <Container className="bg-background">
+      <Container className="bg-background" style={containerStyle}>
         <AgentServerStopped />
       </Container>
     )
@@ -60,18 +63,19 @@ const AgentPage = () => {
 
   if (agents && agents.length === 0) {
     return (
-      <Container className="bg-background">
+      <Container className="bg-background" style={containerStyle}>
         <AgentEmpty />
       </Container>
     )
   }
 
   return (
-    <Container>
+    <Container style={containerStyle}>
       {isLeftNavbar && <AgentNavbar />}
       <div
         id={isLeftNavbar ? 'content-container' : undefined}
-        className="flex min-w-0 flex-1 shrink flex-row overflow-hidden">
+        className="flex min-w-0 flex-1 shrink flex-row overflow-hidden"
+        style={{ maxWidth: isTopNavbar ? 'calc(100vw - 12px)' : undefined }}>
         <AnimatePresence initial={false}>
           {showAssistants && (
             <ErrorBoundary>
@@ -94,9 +98,13 @@ const AgentPage = () => {
   )
 }
 
-const Container = ({ children, className }: PropsWithChildren<{ className?: string }>) => {
+const Container = ({
+  children,
+  className,
+  style
+}: PropsWithChildren<{ className?: string; style?: CSSProperties }>) => {
   return (
-    <div id="agent-page" className={cn('flex flex-1 flex-col overflow-hidden', className)}>
+    <div id="agent-page" className={cn('flex flex-1 flex-col overflow-hidden', className)} style={style}>
       {children}
     </div>
   )

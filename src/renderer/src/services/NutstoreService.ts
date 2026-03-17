@@ -7,7 +7,7 @@ import { NUTSTORE_HOST } from '@shared/config/nutstore'
 import dayjs from 'dayjs'
 import { type CreateDirectoryOptions } from 'webdav'
 
-import { getBackupData, handleData, LEGACY_INTERNAL_BACKUP_FILE_NAME } from './BackupService'
+import { handleData, LEGACY_INTERNAL_BACKUP_FILE_NAME } from './BackupService'
 
 const logger = loggerService.withContext('NutstoreService')
 
@@ -114,12 +114,10 @@ async function cleanupOldBackups(webdavConfig: WebDavConfig, maxBackups: number)
 export async function backupToNutstore({
   showMessage = false,
   customFileName = '',
-  backupData,
   autoBackupProcess = false
 }: {
   showMessage?: boolean
   customFileName?: string
-  backupData?: string
   autoBackupProcess?: boolean
 } = {}) {
   const nutstoreToken = getNutstoreToken()
@@ -155,7 +153,6 @@ export async function backupToNutstore({
 
   store.dispatch(setNutstoreSyncState({ syncing: true, lastSyncError: null }))
 
-  const finalBackupData = backupData || (await getBackupData())
   const skipBackupFile = store.getState().nutstore.nutstoreSkipBackupFile
   const maxBackups = store.getState().nutstore.nutstoreMaxBackups
 
@@ -163,7 +160,7 @@ export async function backupToNutstore({
     // 先清理旧备份
     await cleanupOldBackups(config, maxBackups)
 
-    const isSuccess = await window.api.backup.backupToWebdav(finalBackupData, {
+    const isSuccess = await window.api.backup.backupToWebdav({
       ...config,
       fileName: finalFileName,
       skipBackupFile: skipBackupFile
@@ -307,10 +304,7 @@ async function performAutoBackup() {
       logger.verbose(`[Nutstore AutoBackup] Starting automatic backup... (attempt ${retryCount + 1}/${maxRetries})`)
       store.dispatch(setNutstoreSyncState({ syncing: true, lastSyncError: null }))
 
-      await backupToNutstore({
-        autoBackupProcess: true,
-        backupData: await getBackupData()
-      })
+      await backupToNutstore({ autoBackupProcess: true })
 
       store.dispatch(
         setNutstoreSyncState({

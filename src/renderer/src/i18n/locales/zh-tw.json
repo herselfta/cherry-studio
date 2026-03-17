@@ -28,6 +28,176 @@
       "submit": "提交",
       "title": "來自Agent的提問"
     },
+    "cherryClaw": {
+      "channels": {
+        "comingSoon": "即將推出",
+        "description": "將您的 Agent 連接到訊息平台。",
+        "feishu": {
+          "appId": "應用程式 ID",
+          "appIdPlaceholder": "輸入您的飛書應用程式 ID",
+          "appSecret": "應用程式密鑰",
+          "appSecretPlaceholder": "輸入您的飛書應用程式密鑰",
+          "chatIds": "允許的聊天 ID",
+          "chatIdsHint": "以逗號分隔的聊天 ID。留空則允許所有聊天。",
+          "chatIdsPlaceholder": "oc_xxxxx、oc_yyyyy",
+          "description": "透過 WebSocket 使用 Feishu/Lark 機器人接收並回覆訊息。",
+          "domain": "領域",
+          "domainFeishu": "飛書（中國）",
+          "domainLark": "Lark（國際版）",
+          "encryptKey": "加密金鑰",
+          "encryptKeyPlaceholder": "從您的飛書應用程式輸入加密金鑰",
+          "title": "飛書",
+          "verificationToken": "驗證權杖",
+          "verificationTokenPlaceholder": "請輸入您 Feishu 應用程式中的驗證碼"
+        },
+        "notifyReceiver": "接收任務通知",
+        "notifyReceiverHint": "將排程任務結果傳送到此頻道。",
+        "qq": {
+          "appId": "App ID",
+          "appIdPlaceholder": "輸入您的 QQ 機器人 App ID",
+          "chatIds": "允許的對話 ID",
+          "chatIdsHint": "格式：c2c:openid, group:groupid, channel:channelid。留空表示允許所有。",
+          "chatIdsPlaceholder": "c2c:abc123, group:xyz789",
+          "clientSecret": "Client Secret",
+          "clientSecretPlaceholder": "輸入您的 QQ 機器人 Client Secret",
+          "description": "透過 QQ 機器人官方 API 接收和回覆訊息。",
+          "title": "QQ",
+          "whoamiTip": "💡 提示：發送 /whoami 給機器人即可獲取正確格式的對話 ID。"
+        },
+        "tab": "頻道",
+        "telegram": {
+          "botToken": "Bot Token",
+          "botTokenPlaceholder": "輸入您的 Telegram 機器人 Token",
+          "chatIds": "允許的對話 ID",
+          "chatIdsHint": "用逗號分隔。留空表示允許所有對話。",
+          "chatIdsPlaceholder": "123456789, 987654321",
+          "description": "透過 Telegram 機器人使用長輪詢方式接收和回覆訊息。",
+          "title": "Telegram"
+        },
+        "title": "頻道"
+      },
+      "heartbeat": {
+        "enabled": "啟用心跳",
+        "enabledHelper": "啟用後，如果工作區存在 heartbeat.md 檔案，排程器會按設定的間隔讀取其內容並傳送到主對話。",
+        "interval": "間隔（分鐘）",
+        "intervalHelper": "心跳執行的頻率，單位為分鐘。"
+      },
+      "sandbox": {
+        "description": "使用作業系統級沙箱限制 Agent 的檔案系統和網路存取，僅限於工作區目錄。",
+        "helper": "將檔案系統和命令存取限制在工作區路徑內。",
+        "label": "沙箱模式"
+      },
+      "scheduler": {
+        "cron": {
+          "helper": "標準 cron 表達式（例如 '*/30 * * * *' 表示每 30 分鐘）。",
+          "label": "Cron 表達式",
+          "placeholder": "*/30 * * * *"
+        },
+        "description": "排程器按計劃自動觸發 Agent 執行。",
+        "enabled": "啟用排程器",
+        "enabledHelper": "啟用後，Agent 將根據設定的計劃自動執行。",
+        "errors": {
+          "invalidCron": "無效的 cron 表達式",
+          "invalidDelay": "延遲必須是正數",
+          "invalidInterval": "間隔必須是正數"
+        },
+        "interval": {
+          "helper": "Agent 執行的頻率，單位為秒。",
+          "label": "間隔（秒）"
+        },
+        "lastRun": "上次執行",
+        "never": "從未",
+        "nextRun": "下次執行",
+        "oneTime": {
+          "helper": "Agent 執行前的一次性延遲，單位為秒。",
+          "label": "延遲（秒）"
+        },
+        "status": {
+          "running": "執行中",
+          "stopped": "已停止",
+          "tickInProgress": "執行中"
+        },
+        "tab": "排程器",
+        "title": "排程器設定",
+        "type": {
+          "cron": "Cron 表達式",
+          "interval": "固定間隔",
+          "label": "排程類型",
+          "one-time": "一次性延遲"
+        }
+      },
+      "soul": {
+        "description": "靈魂定義了 Agent 的個性和基礎行為。它從工作區根目錄的 soul.md 檔案中讀取。",
+        "empty": "在工作區根目錄未找到 soul.md 檔案。建立一個來定義 Agent 的個性。",
+        "enabled": "啟用靈魂",
+        "enabledHelper": "啟用後，Agent 會從工作區根目錄讀取 soul.md 並將其添加到系統提示詞前面。",
+        "fileLabel": "soul.md",
+        "preview": "靈魂預覽",
+        "tab": "靈魂",
+        "title": "靈魂設定"
+      },
+      "tasks": {
+        "add": "新增任務",
+        "cancel": "取消",
+        "contextMode": {
+          "isolated": "隔離",
+          "isolatedDesc": "每次執行建立新對話",
+          "label": "上下文模式",
+          "session": "重複使用對話",
+          "sessionDesc": "重複使用最近的對話"
+        },
+        "cronPlaceholder": "例如 0 9 * * *（每天上午 9 點）",
+        "delete": {
+          "confirm": "確定要刪除此任務嗎？",
+          "label": "刪除"
+        },
+        "edit": "編輯",
+        "empty": "暫無排程任務。新增一個開始吧。",
+        "intervalPlaceholder": "間隔（分鐘）",
+        "lastRun": "上次執行",
+        "logs": {
+          "duration": "耗時",
+          "empty": "暫無執行歷史。",
+          "error": "錯誤",
+          "label": "執行歷史",
+          "result": "結果",
+          "runAt": "執行時間",
+          "status": "狀態"
+        },
+        "name": {
+          "label": "名稱",
+          "placeholder": "例如：每日程式碼審查"
+        },
+        "nextRun": "下次執行",
+        "oncePlaceholder": "選擇日期和時間",
+        "pause": "暫停",
+        "prompt": {
+          "label": "提示詞",
+          "placeholder": "此任務執行時 Agent 應該做什麼？"
+        },
+        "resume": "恢復",
+        "run": "執行",
+        "runTriggered": "任務已觸發",
+        "save": "儲存",
+        "scheduleType": {
+          "cron": "Cron",
+          "interval": "間隔",
+          "label": "排程類型",
+          "once": "一次性"
+        },
+        "scheduleValue": "排程值",
+        "status": {
+          "active": "活躍",
+          "completed": "已完成",
+          "paused": "已暫停"
+        },
+        "tab": "任務",
+        "title": "排程任務"
+      },
+      "warning": {
+        "bypassPermissions": "CherryClaw Agent 預設以全自動模式執行。所有工具執行時不會請求批准。"
+      }
+    },
     "delete": {
       "content": "刪除該 Agent 會強制停止並刪除該 Agent 的所有工作階段。確定要刪除嗎？",
       "error": {
@@ -299,7 +469,7 @@
         }
       }
     },
-    "sidebar_title": "Agents",
+    "sidebar_title": "代理人",
     "todo": {
       "panel": {
         "title": "已完成 {{completed}}/{{total}} 個任務"
@@ -725,6 +895,7 @@
     "progress": {
       "completed": "備份完成",
       "compressing": "壓縮檔案...",
+      "copying_database": "複製資料庫...",
       "copying_files": "複製檔案... {{progress}}%",
       "preparing": "準備備份...",
       "preparing_compression": "準備壓縮...",
@@ -3134,7 +3305,10 @@
       "extracting": "解開備份...",
       "preparing": "準備復原...",
       "reading_data": "讀取資料...",
-      "title": "復原進度"
+      "restoring_data": "復原檔案...",
+      "restoring_database": "復原資料庫...",
+      "title": "復原進度",
+      "validating": "驗證備份..."
     },
     "title": "資料復原"
   },
@@ -3723,7 +3897,15 @@
           "button": "選擇備份檔案"
         },
         "content": "匯出部分資料，包括聊天記錄與設定。請注意，備份過程可能需要一些時間，感謝耐心等候。",
+        "file": {
+          "button": "匯出至檔案",
+          "content": "將資料匯出為備份檔案，可透過檔案在行動裝置上匯入。",
+          "export_failed": "匯出失敗",
+          "export_success": "匯出成功",
+          "title": "匯出為檔案"
+        },
         "lan": {
+          "button": "開始傳輸",
           "connected": "已連線",
           "connection_failed": "連線失敗",
           "content": "請確保電腦和手機處於同一網路以使用區域網路傳輸。",
