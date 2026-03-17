@@ -1,8 +1,5 @@
-import { randomUUID } from 'node:crypto'
-
 import { loggerService } from '@logger'
 import type {
-  AgentPersistedMessage,
   AgentSessionMessageEntity,
   CreateSessionMessageRequest,
   GetAgentSessionResponse,
@@ -13,9 +10,8 @@ import { and, desc, eq, not } from 'drizzle-orm'
 
 import { BaseService } from '../BaseService'
 import { sessionMessagesTable } from '../database/schema'
-import { agentMessageRepository } from '../database/sessionMessageRepository'
 import type { AgentStreamEvent } from '../interfaces/AgentStreamInterface'
-import { agentServiceRegistry } from './AgentServiceRegistry'
+import ClaudeCodeService from './claudecode'
 
 const logger = loggerService.withContext('SessionMessageService')
 
@@ -25,11 +21,6 @@ type SessionStreamResult = {
     userMessage?: AgentSessionMessageEntity
     assistantMessage?: AgentSessionMessageEntity
   }>
-}
-
-export type CreateMessageOptions = {
-  /** When true, persist user+assistant messages to DB on stream complete. Use for headless callers (channels, scheduler) where no UI handles persistence. */
-  persist?: boolean
 }
 
 // Ensure errors emitted through SSE are serializable
@@ -64,7 +55,7 @@ class TextStreamAccumulator {
         break
       case 'text-delta':
         if (part.text) {
-          this.textBuffer = part.text
+          this.textBuffer += part.text
         }
         break
       case 'text-end': {
@@ -100,14 +91,11 @@ class TextStreamAccumulator {
         break
     }
   }
-
-  getText(): string {
-    return (this.totalText + this.textBuffer).replace(/\n+$/, '')
-  }
 }
 
 export class SessionMessageService extends BaseService {
   private static instance: SessionMessageService | null = null
+  private cc: ClaudeCodeService = new ClaudeCodeService()
 
   static getInstance(): SessionMessageService {
     if (!SessionMessageService.instance) {
@@ -163,28 +151,26 @@ export class SessionMessageService extends BaseService {
   async createSessionMessage(
     session: GetAgentSessionResponse,
     messageData: CreateSessionMessageRequest,
-    abortController: AbortController,
-    options?: CreateMessageOptions
+    abortController: AbortController
   ): Promise<SessionStreamResult> {
-    return await this.startSessionMessageStream(session, messageData, abortController, options)
+    return await this.startSessionMessageStream(session, messageData, abortController)
   }
 
   private async startSessionMessageStream(
     session: GetAgentSessionResponse,
     req: CreateSessionMessageRequest,
-    abortController: AbortController,
-    options?: CreateMessageOptions
+    abortController: AbortController
   ): Promise<SessionStreamResult> {
     const agentSessionId = await this.getLastAgentSessionId(session.id)
     logger.debug('Session Message stream message data:', { message: req, session_id: agentSessionId })
 
-    if (!agentServiceRegistry.hasService(session.agent_type)) {
+    if (session.agent_type !== 'claude-code') {
+      // TODO: Implement support for other agent types
       logger.error('Unsupported agent type for streaming:', { agent_type: session.agent_type })
-      throw new Error(`Unsupported agent type for streaming: ${session.agent_type}`)
+      throw new Error('Unsupported agent type for streaming')
     }
 
-    const service = agentServiceRegistry.getService(session.agent_type)
-    const claudeStream = await service.invoke(req.content, session, abortController, agentSessionId, {
+    const claudeStream = await this.cc.invoke(req.content, session, abortController, agentSessionId, {
       effort: req.effort,
       thinking: req.thinking
     })
@@ -243,23 +229,7 @@ export class SessionMessageService extends BaseService {
               case 'complete': {
                 cleanup()
                 controller.close()
-                if (options?.persist) {
-                  // Read SDK session_id from the stream object (set by ClaudeCodeService on init)
-                  const resolvedSessionId = claudeStream.sdkSessionId || agentSessionId
-                  logger.debug('Persisting headless exchange with agent session ID', {
-                    sdkSessionId: claudeStream.sdkSessionId,
-                    fallback: agentSessionId,
-                    resolved: resolvedSessionId
-                  })
-                  this.persistHeadlessExchange(session, req.content, accumulator.getText(), resolvedSessionId)
-                    .then(resolveCompletion)
-                    .catch((err) => {
-                      logger.error('Failed to persist headless exchange', err as Error)
-                      resolveCompletion({})
-                    })
-                } else {
-                  resolveCompletion({})
-                }
+                resolveCompletion({})
                 break
               }
 
@@ -291,83 +261,6 @@ export class SessionMessageService extends BaseService {
     })
 
     return { stream, completion }
-  }
-
-  /**
-   * Persist user + assistant messages for headless callers (channels, scheduler)
-   * that have no UI to handle persistence via IPC.
-   */
-  private async persistHeadlessExchange(
-    session: GetAgentSessionResponse,
-    userContent: string,
-    assistantContent: string,
-    agentSessionId: string
-  ): Promise<{ userMessage?: AgentSessionMessageEntity; assistantMessage?: AgentSessionMessageEntity }> {
-    const now = new Date().toISOString()
-    const userMsgId = randomUUID()
-    const assistantMsgId = randomUUID()
-    const userBlockId = randomUUID()
-    const assistantBlockId = randomUUID()
-    const topicId = `agent-session:${session.id}`
-
-    const userPayload = {
-      message: {
-        id: userMsgId,
-        role: 'user' as const,
-        assistantId: session.agent_id,
-        topicId,
-        createdAt: now,
-        status: 'success',
-        blocks: [userBlockId]
-      },
-      blocks: [
-        {
-          id: userBlockId,
-          messageId: userMsgId,
-          type: 'main_text',
-          createdAt: now,
-          status: 'success',
-          content: userContent
-        }
-      ]
-    } as AgentPersistedMessage
-
-    const assistantPayload = {
-      message: {
-        id: assistantMsgId,
-        role: 'assistant' as const,
-        assistantId: session.agent_id,
-        topicId,
-        createdAt: now,
-        status: 'success',
-        blocks: [assistantBlockId]
-      },
-      blocks: [
-        {
-          id: assistantBlockId,
-          messageId: assistantMsgId,
-          type: 'main_text',
-          createdAt: now,
-          status: 'success',
-          content: assistantContent
-        }
-      ]
-    } as AgentPersistedMessage
-
-    const result = await agentMessageRepository.persistExchange({
-      sessionId: session.id,
-      agentSessionId,
-      user: { payload: userPayload, createdAt: now },
-      assistant: { payload: assistantPayload, createdAt: now }
-    })
-
-    logger.info('Persisted headless exchange', {
-      sessionId: session.id,
-      userMessageId: userMsgId,
-      assistantMessageId: assistantMsgId
-    })
-
-    return result
   }
 
   private async getLastAgentSessionId(sessionId: string): Promise<string> {

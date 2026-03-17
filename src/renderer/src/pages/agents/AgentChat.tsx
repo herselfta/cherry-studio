@@ -34,8 +34,8 @@ const AgentChat = () => {
   const { isLoading: isAgentsLoading, agents } = useAgents()
   const { createDefaultSession } = useCreateDefaultSession(activeAgentId)
 
-  // Don't show select/create alerts while data is still loading.
-  // apiServerRunning is guaranteed by AgentPage guard.
+  // Don't show select/create alerts while data is still loading
+  // apiServerRunning is guaranteed by AgentPage guard
   const isInitializing =
     isAgentsLoading || isAgentLoading || !isSessionInitialized || !agents || (!activeAgentId && agents.length > 0)
 
@@ -61,7 +61,7 @@ const AgentChat = () => {
     )
   }
 
-  // Initialized: agents.length === 0 is handled by AgentPage.
+  // Initialized — agents.length === 0 is handled by AgentPage
   if (!activeAgentId) {
     return (
       <Container className="flex flex-1 flex-col justify-between">
@@ -85,11 +85,14 @@ const AgentChat = () => {
   return (
     <Container>
       <QuickPanelProvider>
+        {/* Main Chat */}
         <div className="flex min-w-0 flex-1 flex-col">
+          {/* Header */}
           <div className="flex h-fit w-full min-w-0">
             {activeAgent && <AgentChatNavbar className="min-w-0" activeAgent={activeAgent} />}
           </div>
 
+          {/* Messages */}
           <div className="translate-z-0 relative flex w-full flex-1 flex-col justify-between overflow-y-auto">
             <AgentSessionMessages agentId={activeAgentId} sessionId={activeSessionId} />
             <div className="mt-auto px-4.5 pb-2">
@@ -99,11 +102,12 @@ const AgentChat = () => {
             </div>
             {messageNavigation === 'buttons' && <ChatNavigation containerId="messages" />}
           </div>
-
+          {/* Inputbar */}
           <AgentSessionInputbar agentId={activeAgentId} sessionId={activeSessionId} />
         </div>
       </QuickPanelProvider>
 
+      {/* Sessions Panel */}
       <AnimatePresence initial={false}>
         {showRightSessions && (
           <motion.div

@@ -37,7 +37,7 @@ export class SessionService extends BaseService {
     const commands: SlashCommand[] = []
 
     // Add builtin slash commands
-    if (agentType === 'claude-code' || agentType === 'cherry-claw') {
+    if (agentType === 'claude-code') {
       commands.push(...builtinSlashCommands)
     }
 

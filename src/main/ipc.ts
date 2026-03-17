@@ -91,7 +91,7 @@ import { themeService } from './services/ThemeService'
 import VertexAIService from './services/VertexAIService'
 import { setOpenLinkExternal } from './services/WebviewService'
 import { windowService } from './services/WindowService'
-import { calculateDirectorySize, getResourcePath } from './utils'
+import { calculateDirectorySize, getDataPath, getResourcePath } from './utils'
 import { decrypt, encrypt } from './utils/aes'
 import {
   getCacheDir,
@@ -103,7 +103,7 @@ import {
   untildify
 } from './utils/file'
 import { updateAppDataConfig } from './utils/init'
-import { relaunchAppGracefully } from './utils/lifecycle'
+import { closeAllDataConnections, relaunchAppGracefully } from './utils/lifecycle'
 import { getMacCodeSignatureInfo } from './utils/macCodeSigning'
 import { getCpuName, getDeviceType, getHostname } from './utils/system'
 import { compress, decompress } from './utils/zip'
@@ -507,7 +507,15 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   })
 
   // Reset all data (factory reset)
-  ipcMain.handle(IpcChannel.App_ResetData, () => backupManager.resetData())
+  // Best-effort: close handles then delete. Failures are logged but not thrown,
+  // because the caller must always proceed to relaunchApp() — process exit
+  // releases any remaining handles, and services auto-recreate on next start.
+  ipcMain.handle(IpcChannel.App_ResetData, async () => {
+    await closeAllDataConnections()
+    await fs.promises.rm(getDataPath(), { recursive: true, force: true }).catch((e) => {
+      logger.warn('Failed to remove Data directory (will be cleaned up on restart)', e as Error)
+    })
+  })
 
   // check for update
   ipcMain.handle(IpcChannel.App_CheckForUpdate, async () => {
@@ -614,7 +622,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.Backup_DeleteS3File, backupManager.deleteS3File.bind(backupManager))
   ipcMain.handle(IpcChannel.Backup_CheckS3Connection, backupManager.checkS3Connection.bind(backupManager))
   ipcMain.handle(IpcChannel.Backup_CreateLanTransferBackup, backupManager.createLanTransferBackup.bind(backupManager))
-  ipcMain.handle(IpcChannel.Backup_DeleteLanTransferBackup, backupManager.deleteLanTransferBackup.bind(backupManager))
+  ipcMain.handle(IpcChannel.Backup_DeleteTempBackup, backupManager.deleteTempBackup.bind(backupManager))
 
   // file
   ipcMain.handle(IpcChannel.File_Open, fileManager.open.bind(fileManager))
@@ -1171,7 +1179,6 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.OpenClaw_Uninstall, openClawService.uninstall)
   ipcMain.handle(IpcChannel.OpenClaw_StartGateway, openClawService.startGateway)
   ipcMain.handle(IpcChannel.OpenClaw_StopGateway, openClawService.stopGateway)
-  ipcMain.handle(IpcChannel.OpenClaw_RestartGateway, openClawService.restartGateway)
   ipcMain.handle(IpcChannel.OpenClaw_GetStatus, openClawService.getStatus)
   ipcMain.handle(IpcChannel.OpenClaw_CheckHealth, openClawService.checkHealth)
   ipcMain.handle(IpcChannel.OpenClaw_GetDashboardUrl, openClawService.getDashboardUrl)

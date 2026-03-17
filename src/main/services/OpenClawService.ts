@@ -126,7 +126,6 @@ class OpenClawService {
     this.uninstall = this.uninstall.bind(this)
     this.startGateway = this.startGateway.bind(this)
     this.stopGateway = this.stopGateway.bind(this)
-    this.restartGateway = this.restartGateway.bind(this)
     this.getStatus = this.getStatus.bind(this)
     this.checkHealth = this.checkHealth.bind(this)
     this.getDashboardUrl = this.getDashboardUrl.bind(this)
@@ -198,6 +197,7 @@ class OpenClawService {
       }
     } else {
       try {
+        // Remove existing symlink or file at target path
         if (fs.existsSync(SYMLINK_PATH)) {
           fs.unlinkSync(SYMLINK_PATH)
         }
@@ -258,6 +258,7 @@ class OpenClawService {
 
       this.sendInstallProgress('Downloading and installing OpenClaw...')
       await runInstallScript('install-openclaw.js', extraEnv)
+
       await this.linkBinary()
 
       this.sendInstallProgress('OpenClaw installed successfully!')
@@ -289,6 +290,7 @@ class OpenClawService {
       this.sendInstallProgress('Removing OpenClaw binary...')
 
       await this.unlinkBinary()
+
       if (fs.existsSync(binaryPath)) {
         fs.unlinkSync(binaryPath)
         logger.info(`Removed OpenClaw binary: ${binaryPath}`)
@@ -395,8 +397,8 @@ class OpenClawService {
     // Instead, use windowsHide: true without detached - proc.unref() ensures
     // the parent can exit independently.
     const proc = spawn(openclawPath, args, {
-      env: { ...shellEnv, OPENCLAW_CONFIG_PATH },
-      detached: !isWin,
+      env: shellEnv,
+      detached: !isWin, // Only detach on non-Windows to avoid console flash
       stdio: ['ignore', 'ignore', 'pipe'],
       windowsHide: true
     })
@@ -532,9 +534,7 @@ class OpenClawService {
     timeoutMs = 20000
   ): Promise<{ code: number | null; stdout: string; stderr: string }> {
     return new Promise((resolve) => {
-      const proc = crossPlatformSpawn(openclawPath, args, {
-        env: { ...env, OPENCLAW_CONFIG_PATH }
-      })
+      const proc = crossPlatformSpawn(openclawPath, args, { env })
 
       let stdout = ''
       let stderr = ''
@@ -564,17 +564,6 @@ class OpenClawService {
         resolve({ code: null, stdout, stderr: err.message })
       })
     })
-  }
-
-  /**
-   * Restart the OpenClaw Gateway.
-   */
-  public async restartGateway(): Promise<OperationResult> {
-    const stopResult = await this.stopGateway()
-    if (!stopResult.success) {
-      return stopResult
-    }
-    return this.startGateway({} as Electron.IpcMainInvokeEvent, this.gatewayPort)
   }
 
   /**
