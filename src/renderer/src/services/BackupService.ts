@@ -188,13 +188,11 @@ export async function reset() {
 export async function backupToWebdav({
   showMessage = false,
   customFileName = '',
-  autoBackupProcess = false,
-  backupData
+  autoBackupProcess = false
 }: {
   showMessage?: boolean
   customFileName?: string
   autoBackupProcess?: boolean
-  backupData?: string
 } = {}) {
   const notificationService = NotificationService.getInstance()
   if (isManualBackupRunning) {
@@ -387,13 +385,11 @@ export async function restoreFromWebdav(fileName?: string) {
 export async function backupToS3({
   showMessage = false,
   customFileName = '',
-  autoBackupProcess = false,
-  backupData
+  autoBackupProcess = false
 }: {
   showMessage?: boolean
   customFileName?: string
   autoBackupProcess?: boolean
-  backupData?: string
 } = {}) {
   const notificationService = NotificationService.getInstance()
   if (isManualBackupRunning) {
@@ -962,13 +958,11 @@ async function clearDatabase() {
 export async function backupToLocal({
   showMessage = false,
   customFileName = '',
-  autoBackupProcess = false,
-  backupData
+  autoBackupProcess = false
 }: {
   showMessage?: boolean
   customFileName?: string
   autoBackupProcess?: boolean
-  backupData?: string
 } = {}) {
   const notificationService = NotificationService.getInstance()
   if (isManualBackupRunning) {

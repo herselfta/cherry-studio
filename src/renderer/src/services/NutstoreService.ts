@@ -114,12 +114,10 @@ async function cleanupOldBackups(webdavConfig: WebDavConfig, maxBackups: number)
 export async function backupToNutstore({
   showMessage = false,
   customFileName = '',
-  backupData,
   autoBackupProcess = false
 }: {
   showMessage?: boolean
   customFileName?: string
-  backupData?: string
   autoBackupProcess?: boolean
 } = {}) {
   const nutstoreToken = getNutstoreToken()
@@ -307,8 +305,7 @@ async function performAutoBackup() {
       store.dispatch(setNutstoreSyncState({ syncing: true, lastSyncError: null }))
 
       await backupToNutstore({
-        autoBackupProcess: true,
-        backupData: await getBackupData()
+        autoBackupProcess: true
       })
 
       store.dispatch(

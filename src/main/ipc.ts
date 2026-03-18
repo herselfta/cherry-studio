@@ -103,7 +103,7 @@ import {
   untildify
 } from './utils/file'
 import { updateAppDataConfig } from './utils/init'
-import { closeAllDataConnections, relaunchAppGracefully } from './utils/lifecycle'
+import { relaunchAppGracefully } from './utils/lifecycle'
 import { getMacCodeSignatureInfo } from './utils/macCodeSigning'
 import { getCpuName, getDeviceType, getHostname } from './utils/system'
 import { compress, decompress } from './utils/zip'
