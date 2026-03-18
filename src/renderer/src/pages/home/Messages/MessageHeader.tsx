@@ -21,7 +21,6 @@ import { Sparkle } from 'lucide-react'
 import type { FC } from 'react'
 import { memo, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useLocation } from 'react-router-dom'
 import styled from 'styled-components'
 
 import MessageTokens from './MessageTokens'
@@ -39,6 +38,10 @@ const getAvatarSource = (isLocalAi: boolean, modelId: string | undefined) => {
   return modelId ? getModelLogoById(modelId) : undefined
 }
 
+const getCurrentPathname = () => {
+  return window.location.hash.replace(/^#/, '').split('?')[0] || '/'
+}
+
 const MessageHeader: FC<Props> = memo(({ assistant, model, message, topic, isGroupContextMessage }) => {
   const avatar = useAvatar()
   const { theme } = useTheme()
@@ -46,7 +49,7 @@ const MessageHeader: FC<Props> = memo(({ assistant, model, message, topic, isGro
   const { chat } = useRuntime()
   const { activeAgentId } = chat
   const { agent } = useAgent(activeAgentId)
-  const { pathname } = useLocation()
+  const pathname = getCurrentPathname()
   const isAgentView = pathname.startsWith('/agents')
   const { t } = useTranslation()
   const { isBubbleStyle } = useMessageStyle()

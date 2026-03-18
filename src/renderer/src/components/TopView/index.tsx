@@ -1,4 +1,3 @@
-// import { loggerService } from '@logger'
 import TopViewMinappContainer from '@renderer/components/MinApp/TopViewMinappContainer'
 import { useAppInit } from '@renderer/hooks/useAppInit'
 import { useShortcuts } from '@renderer/hooks/useShortcuts'
@@ -27,8 +26,6 @@ type ElementItem = {
   id: string
   element: React.FC | React.ReactNode
 }
-
-// const logger = loggerService.withContext('TopView')
 
 const TopViewContainer: React.FC<Props> = ({ children }) => {
   const [elements, setElements] = useState<ElementItem[]>([])

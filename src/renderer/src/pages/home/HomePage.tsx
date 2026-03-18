@@ -2,6 +2,14 @@ import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import { useAssistants } from '@renderer/hooks/useAssistant'
 import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
 import { useActiveTopic } from '@renderer/hooks/useTopic'
+import {
+  consumePendingHomeNavigationState,
+  findAssistantByHomeNavigationState,
+  findTopicByHomeNavigationState,
+  type HomeNavigationState,
+  resolveHomeActiveTopic
+} from '@renderer/pages/home/navigationState'
+import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import NavigationService from '@renderer/services/NavigationService'
 import { newMessagesActions } from '@renderer/store/newMessage'
 import type { Assistant, Topic } from '@renderer/types'
@@ -25,12 +33,17 @@ const HomePage: FC = () => {
   const { isLeftNavbar } = useNavbarPosition()
 
   const location = useLocation()
-  const state = location.state
+  const routeState = location.state as HomeNavigationState | null
+  const [navigationState, setNavigationState] = useState<HomeNavigationState | null>(
+    () => routeState || consumePendingHomeNavigationState()
+  )
+  const assistantFromState = findAssistantByHomeNavigationState(assistants, navigationState)
+  const topicFromState = findTopicByHomeNavigationState(assistants, assistantFromState, navigationState)
 
   const [activeAssistant, _setActiveAssistant] = useState<Assistant>(
-    state?.assistant || _activeAssistant || assistants[0]
+    assistantFromState || _activeAssistant || assistants[0]
   )
-  const { activeTopic, setActiveTopic: _setActiveTopic } = useActiveTopic(activeAssistant?.id ?? '', state?.topic)
+  const { activeTopic, setActiveTopic: _setActiveTopic } = useActiveTopic(activeAssistant?.id ?? '', topicFromState)
   const { showAssistants, showTopics, topicPosition } = useSettings()
   const dispatch = useDispatch()
 
@@ -43,7 +56,9 @@ const HomePage: FC = () => {
         _setActiveAssistant(newAssistant)
         // 同步更新 active topic，避免不必要的重新渲染
         const newTopic = newAssistant.topics[0]
-        _setActiveTopic((prev) => (newTopic?.id === prev.id ? prev : newTopic))
+        if (newTopic) {
+          _setActiveTopic((prev) => resolveHomeActiveTopic(prev, newTopic))
+        }
       })
     },
     [_setActiveTopic, activeAssistant?.id]
@@ -52,7 +67,7 @@ const HomePage: FC = () => {
   const setActiveTopic = useCallback(
     (newTopic: Topic) => {
       startTransition(() => {
-        _setActiveTopic((prev) => (newTopic?.id === prev.id ? prev : newTopic))
+        _setActiveTopic((prev) => resolveHomeActiveTopic(prev, newTopic))
         dispatch(newMessagesActions.setTopicFulfilled({ topicId: newTopic.id, fulfilled: false }))
       })
     },
@@ -64,10 +79,46 @@ const HomePage: FC = () => {
   }, [navigate])
 
   useEffect(() => {
-    state?.assistant && setActiveAssistant(state?.assistant)
-    state?.topic && setActiveTopic(state?.topic)
+    if (routeState) {
+      setNavigationState(routeState)
+      return
+    }
+
+    const pendingState = consumePendingHomeNavigationState()
+    if (pendingState) {
+      setNavigationState(pendingState)
+    }
+  }, [routeState])
+
+  useEffect(() => {
+    const unsubscribe = EventEmitter.on(EVENT_NAMES.APPLY_HOME_NAVIGATION_STATE, (state) => {
+      setNavigationState(state as HomeNavigationState)
+    })
+
+    return () => unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (!navigationState) {
+      return
+    }
+
+    const nextAssistant = findAssistantByHomeNavigationState(assistants, navigationState)
+    const nextTopic = findTopicByHomeNavigationState(assistants, nextAssistant, navigationState)
+
+    if (navigationState.assistantId && !nextAssistant) {
+      return
+    }
+
+    if (navigationState.topicId && !nextTopic) {
+      return
+    }
+
+    nextAssistant && setActiveAssistant(nextAssistant)
+    nextTopic && setActiveTopic(nextTopic)
+    setNavigationState(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state])
+  }, [assistants, navigationState])
 
   useEffect(() => {
     const canMinimize = topicPosition == 'left' ? !showAssistants : !showAssistants && !showTopics

@@ -1,6 +1,7 @@
 import { HStack } from '@renderer/components/Layout'
 import { MessageEditingProvider } from '@renderer/context/MessageEditingContext'
 import { getTopicById } from '@renderer/hooks/useTopic'
+import MessageErrorBoundary from '@renderer/pages/home/Messages/MessageErrorBoundary'
 import { default as MessageItem } from '@renderer/pages/home/Messages/Message'
 import { locateToMessage } from '@renderer/services/MessagesService'
 import NavigationService from '@renderer/services/NavigationService'
@@ -44,7 +45,9 @@ const SearchMessage: FC<Props> = ({ message, ...props }) => {
     <MessageEditingProvider>
       <MessagesContainer {...props}>
         <ContainerWrapper>
-          <MessageItem message={message} topic={topic} hideMenuBar={true} />
+          <MessageErrorBoundary>
+            <MessageItem message={message} topic={topic} hideMenuBar={true} />
+          </MessageErrorBoundary>
           <Button
             type="text"
             size="middle"

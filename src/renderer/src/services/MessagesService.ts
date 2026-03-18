@@ -1,12 +1,17 @@
 import { loggerService } from '@logger'
 import SearchPopup from '@renderer/components/Popups/SearchPopup'
 import { DEFAULT_CONTEXTCOUNT, MAX_CONTEXT_COUNT, UNLIMITED_CONTEXT_COUNT } from '@renderer/config/constant'
-import { getTopicById } from '@renderer/hooks/useTopic'
 import i18n from '@renderer/i18n'
+import {
+  createHomeNavigationStateForMessage,
+  isHomeRouteActive,
+  setPendingHomeNavigationState
+} from '@renderer/pages/home/navigationState'
 import { fetchMessagesSummary } from '@renderer/services/ApiService'
 import store from '@renderer/store'
 import { messageBlocksSelectors, removeManyBlocks } from '@renderer/store/messageBlock'
 import { selectMessagesForTopic } from '@renderer/store/newMessage'
+import { loadTopicMessagesThunk } from '@renderer/store/thunk/messageThunk'
 import type { Assistant, FileMetadata, Model, Topic, Usage } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
@@ -27,7 +32,7 @@ import dayjs from 'dayjs'
 import { t } from 'i18next'
 import type { NavigateFunction } from 'react-router'
 
-import { getAssistantById, getAssistantProvider, getDefaultModel } from './AssistantService'
+import { getAssistantProvider, getDefaultModel } from './AssistantService'
 import { EVENT_NAMES, EventEmitter } from './EventService'
 import FileManager from './FileManager'
 
@@ -79,11 +84,17 @@ export function isGenerating() {
 export async function locateToMessage(navigate: NavigateFunction, message: Message) {
   await isGenerating()
 
-  SearchPopup.hide()
-  const assistant = getAssistantById(message.assistantId)
-  const topic = await getTopicById(message.topicId)
+  const navigationState = createHomeNavigationStateForMessage(message)
 
-  navigate('/', { state: { assistant, topic } })
+  setPendingHomeNavigationState(navigationState)
+  await SearchPopup.hide()
+  await store.dispatch(loadTopicMessagesThunk(message.topicId))
+
+  if (isHomeRouteActive()) {
+    EventEmitter.emit(EVENT_NAMES.APPLY_HOME_NAVIGATION_STATE, navigationState)
+  } else {
+    navigate('/')
+  }
 
   setTimeout(() => EventEmitter.emit(EVENT_NAMES.SHOW_TOPIC_SIDEBAR), 0)
   setTimeout(() => EventEmitter.emit(EVENT_NAMES.LOCATE_MESSAGE + ':' + message.id), 300)

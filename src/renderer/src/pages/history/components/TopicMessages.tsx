@@ -6,10 +6,17 @@ import useScrollPosition from '@renderer/hooks/useScrollPosition'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { getTopicById } from '@renderer/hooks/useTopic'
-import { getAssistantById } from '@renderer/services/AssistantService'
+import MessageErrorBoundary from '@renderer/pages/home/Messages/MessageErrorBoundary'
+import {
+  createHomeNavigationStateForTopic,
+  isHomeRouteActive,
+  setPendingHomeNavigationState
+} from '@renderer/pages/home/navigationState'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import { isGenerating, locateToMessage } from '@renderer/services/MessagesService'
 import NavigationService from '@renderer/services/NavigationService'
+import { useAppDispatch } from '@renderer/store'
+import { loadTopicMessagesThunk } from '@renderer/store/thunk/messageThunk'
 import type { Topic } from '@renderer/types'
 import { classNames, runAsyncFunction } from '@renderer/utils'
 import { Button, Divider, Empty } from 'antd'
@@ -30,6 +37,7 @@ const TopicMessages: FC<Props> = ({ topic: _topic, ...props }) => {
   const { handleScroll, containerRef } = useScrollPosition('TopicMessages')
   const { messageStyle } = useSettings()
   const { setTimeoutTimer } = useTimer()
+  const dispatch = useAppDispatch()
 
   const [topic, setTopic] = useState<Topic | undefined>(_topic)
 
@@ -40,7 +48,7 @@ const TopicMessages: FC<Props> = ({ topic: _topic, ...props }) => {
       const topic = await getTopicById(_topic.id)
       setTopic(topic)
     })
-  }, [_topic, topic])
+  }, [_topic])
 
   const isEmpty = (topic?.messages || []).length === 0
 
@@ -50,9 +58,18 @@ const TopicMessages: FC<Props> = ({ topic: _topic, ...props }) => {
 
   const onContinueChat = async (topic: Topic) => {
     await isGenerating()
-    SearchPopup.hide()
-    const assistant = getAssistantById(topic.assistantId)
-    navigate('/', { state: { assistant, topic } })
+    const navigationState = createHomeNavigationStateForTopic({ assistantId: topic.assistantId, topicId: topic.id })
+
+    setPendingHomeNavigationState(navigationState)
+    await SearchPopup.hide()
+    await dispatch(loadTopicMessagesThunk(topic.id))
+
+    if (isHomeRouteActive()) {
+      EventEmitter.emit(EVENT_NAMES.APPLY_HOME_NAVIGATION_STATE, navigationState)
+    } else {
+      navigate('/')
+    }
+
     setTimeoutTimer('onContinueChat', () => EventEmitter.emit(EVENT_NAMES.SHOW_TOPIC_SIDEBAR), 100)
   }
 
@@ -62,7 +79,9 @@ const TopicMessages: FC<Props> = ({ topic: _topic, ...props }) => {
         <ContainerWrapper className={messageStyle}>
           {topic?.messages.map((message) => (
             <MessageWrapper key={message.id} className={classNames([messageStyle, message.role])}>
-              <MessageItem message={message} topic={topic} hideMenuBar={true} />
+              <MessageErrorBoundary>
+                <MessageItem message={message} topic={topic} hideMenuBar={true} />
+              </MessageErrorBoundary>
               <Button
                 type="text"
                 size="middle"

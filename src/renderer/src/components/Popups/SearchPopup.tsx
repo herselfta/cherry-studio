@@ -1,3 +1,4 @@
+import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import HistoryPage from '@renderer/pages/history/HistoryPage'
 import { Modal } from 'antd'
 import { useState } from 'react'
@@ -6,9 +7,12 @@ import { TopView } from '../TopView'
 
 interface Props {
   resolve: (data: any) => void
+  topViewKey: string
 }
 
-const PopupContainer: React.FC<Props> = ({ resolve }) => {
+const TopViewKey = 'SearchPopup'
+
+const PopupContainer: React.FC<Props> = ({ resolve, topViewKey }) => {
   const [open, setOpen] = useState(true)
 
   const onOk = () => {
@@ -21,9 +25,8 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
 
   const onClose = () => {
     resolve({})
+    TopView.hide(topViewKey)
   }
-
-  SearchPopup.hide = onCancel
 
   return (
     <Modal
@@ -50,26 +53,45 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       centered
       closable={false}
       footer={null}>
-      <HistoryPage />
+      <ErrorBoundary>
+        <HistoryPage />
+      </ErrorBoundary>
     </Modal>
   )
 }
 
 export default class SearchPopup {
   static topviewId = 0
+  static currentTopViewKey: string | null = null
+
   static hide() {
-    TopView.hide('SearchPopup')
+    if (this.currentTopViewKey) {
+      TopView.hide(this.currentTopViewKey)
+      this.currentTopViewKey = null
+    }
+    TopView.hide(TopViewKey)
   }
   static show() {
+    const topViewKey = `${TopViewKey}:${++this.topviewId}`
+    if (this.currentTopViewKey) {
+      TopView.hide(this.currentTopViewKey)
+    }
+    TopView.hide(TopViewKey)
+    this.currentTopViewKey = topViewKey
+
     return new Promise<any>((resolve) => {
       TopView.show(
         <PopupContainer
+          topViewKey={topViewKey}
           resolve={(v) => {
             resolve(v)
-            TopView.hide('SearchPopup')
+            TopView.hide(topViewKey)
+            if (this.currentTopViewKey === topViewKey) {
+              this.currentTopViewKey = null
+            }
           }}
         />,
-        'SearchPopup'
+        topViewKey
       )
     })
   }
