@@ -7,7 +7,7 @@ import { NUTSTORE_HOST } from '@shared/config/nutstore'
 import dayjs from 'dayjs'
 import { type CreateDirectoryOptions } from 'webdav'
 
-import { handleData, LEGACY_INTERNAL_BACKUP_FILE_NAME } from './BackupService'
+import { getBackupData, handleData, isMigrationBackupFile, LEGACY_INTERNAL_BACKUP_FILE_NAME } from './BackupService'
 
 const logger = loggerService.withContext('NutstoreService')
 
@@ -81,7 +81,8 @@ async function cleanupOldBackups(webdavConfig: WebDavConfig, maxBackups: number)
         (file) =>
           file.fileName.startsWith('cherry-studio') &&
           file.fileName.endsWith('.zip') &&
-          file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME
+          file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME &&
+          isMigrationBackupFile(file.fileName)
       )
       .sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
 
@@ -146,7 +147,7 @@ export async function backupToNutstore({
     logger.error('[backupToNutstore] Failed to get device type:', error as Error)
   }
   const timestamp = dayjs().format('YYYYMMDDHHmmss')
-  const backupFileName = customFileName || `cherry-studio.${timestamp}.${deviceType}.zip`
+  const backupFileName = customFileName || `cherry-studio.migration.${timestamp}.${deviceType}.zip`
   const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
 
   isManualBackupRunning = true
@@ -160,11 +161,14 @@ export async function backupToNutstore({
     // 先清理旧备份
     await cleanupOldBackups(config, maxBackups)
 
-    const isSuccess = await window.api.backup.backupToWebdav({
+    // Nutstore is a remote backend, so it must upload the portable migration payload
+    // instead of direct storage snapshots. Keeping this aligned with WebDAV/S3 avoids
+    // another cross-platform regression when users switch transport providers.
+    const isSuccess = await window.api.backup.backupMigrationToWebdav({
       ...config,
       fileName: finalFileName,
       skipBackupFile: skipBackupFile
-    })
+    }, await getBackupData())
 
     if (isSuccess) {
       store.dispatch(setNutstoreSyncState({ lastSyncError: null }))

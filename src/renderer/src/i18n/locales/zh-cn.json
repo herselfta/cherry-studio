@@ -3818,6 +3818,14 @@
         },
         "title": "导出至手机"
       },
+      "artifact_type": {
+        "app": "APP",
+        "backup_title": "选择备份方式",
+        "cross_device_help": "PC 会生成桌面完整迁移包，APP 会生成仅同步公共项的手机同步包。",
+        "cross_device_title": "跨设备数据",
+        "pc": "PC",
+        "restore_title": "选择恢复方式"
+      },
       "hour_interval_one": "{{count}} 小时",
       "hour_interval_other": "{{count}} 小时",
       "import_settings": {
@@ -4268,6 +4276,7 @@
                 "delete": "请选择要删除的备份文件"
               }
             },
+            "empty": "暂无可用文件",
             "title": "备份数据管理"
           },
           "modal": {
@@ -4275,6 +4284,25 @@
               "placeholder": "请输入备份文件名"
             },
             "title": "备份到 WebDAV"
+          }
+        },
+        "mobile_sync": {
+          "help": "通过 WebDAV 同步桌面端与手机端都能识别的公共数据，不会覆盖桌面端专属配置。",
+          "manager": {
+            "empty": "未找到手机同步文件",
+            "title": "手机同步文件"
+          },
+          "restore": {
+            "button": "从 WebDAV 同步",
+            "confirm": {
+              "content": "将从 WebDAV 导入手机同步数据并合并到当前数据，是否继续？",
+              "title": "确认同步"
+            },
+            "success": "同步成功，应用将在几秒后刷新"
+          },
+          "upload": {
+            "button": "同步到 WebDAV",
+            "success": "已将 {{fileName}} 同步到 WebDAV"
           }
         },
         "disableStream": {

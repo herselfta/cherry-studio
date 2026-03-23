@@ -9,6 +9,7 @@ import {
   backupToLocal,
   backupToS3,
   backupToWebdav,
+  isMigrationBackupFile,
   LEGACY_INTERNAL_BACKUP_FILE_NAME,
   restoreFromLocal,
   restoreFromS3,
@@ -145,8 +146,14 @@ export function getNextManualSyncOccurrence(now: Date, times: string[]): Date | 
   return nextDate
 }
 
-export function pickLatestManualBackup(files: BackupFile[]): BackupFile | null {
-  return files.find((file) => file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME) ?? null
+export function pickLatestManualBackup(files: BackupFile[], portableOnly = false): BackupFile | null {
+  return (
+    files.find(
+      (file) =>
+        file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME &&
+        (!portableOnly || isMigrationBackupFile(file.fileName))
+    ) ?? null
+  )
 }
 
 export function startManualSyncSchedules() {
@@ -317,7 +324,7 @@ async function getLatestManualBackup(provider: ManualSyncProvider): Promise<Back
       webdavPass,
       webdavPath
     } as WebDavConfig)
-    return pickLatestManualBackup(files)
+    return pickLatestManualBackup(files, true)
   }
 
   if (provider === 'local') {
@@ -333,12 +340,12 @@ async function getLatestManualBackup(provider: ManualSyncProvider): Promise<Back
     }
 
     const files = await window.api.backup.listWebdavFiles(config)
-    return pickLatestManualBackup(files)
+    return pickLatestManualBackup(files, true)
   }
 
   const s3Config = store.getState().settings.s3
   const files = await window.api.backup.listS3Files(s3Config)
-  return pickLatestManualBackup(files)
+  return pickLatestManualBackup(files, true)
 }
 
 async function confirmScheduledRestore(provider: ManualSyncProvider, file: BackupFile) {

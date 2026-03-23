@@ -1,11 +1,17 @@
 import { FolderOpenOutlined, SaveOutlined } from '@ant-design/icons'
+import BackupTypeModal, { type BackupArtifactType } from '@renderer/components/BackupTypeModal'
 import { HStack } from '@renderer/components/Layout'
 import Selector from '@renderer/components/Selector'
 import { WebdavBackupManager } from '@renderer/components/WebdavBackupManager'
-import { useWebdavBackupModal, WebdavBackupModal } from '@renderer/components/WebdavModals'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
-import { startAutoBackup, stopAutoBackup } from '@renderer/services/BackupService'
+import { backupToWebdavWithConfig, restoreFromWebdavWithConfig, startAutoBackup, stopAutoBackup } from '@renderer/services/BackupService'
+import { buildBackupArtifactFileName } from '@renderer/services/BackupArtifactService'
+import {
+  importMobileSyncFromWebdav,
+  isMobileSyncRemoteFile,
+  uploadMobileSyncToWebdav
+} from '@renderer/services/MobileSyncService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import {
   setWebdavAutoSync,
@@ -18,9 +24,10 @@ import {
   setWebdavSyncInterval as _setWebdavSyncInterval,
   setWebdavUser as _setWebdavUser
 } from '@renderer/store/settings'
+import type { WebDavConfig } from '@renderer/types'
 import { Button, Input, Switch } from 'antd'
 import type { FC } from 'react'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -52,16 +59,18 @@ const WebDavSettings: FC = () => {
   const [webdavPath, setWebdavPath] = useState<string | undefined>(webDAVPath)
   const [webdavSkipBackupFile, setWebdavSkipBackupFile] = useState<boolean>(webdDAVSkipBackupFile)
   const [webdavDisableStream, setWebdavDisableStream] = useState<boolean>(webDAVDisableStream)
-  const [backupManagerVisible, setBackupManagerVisible] = useState(false)
+  const [managerType, setManagerType] = useState<BackupArtifactType | null>(null)
+  const [backupModalVisible, setBackupModalVisible] = useState(false)
+  const [backupType, setBackupType] = useState<BackupArtifactType>('pc')
+  const [backupFileName, setBackupFileName] = useState('')
+  const [backuping, setBackuping] = useState(false)
 
   const [syncInterval, setSyncInterval] = useState<number>(webDAVSyncInterval)
   const [maxBackups, setMaxBackups] = useState<number>(webDAVMaxBackups)
 
   const dispatch = useAppDispatch()
   const { theme } = useTheme()
-
   const { t } = useTranslation()
-
   const { webdavSync } = useAppSelector((state) => state.backup)
 
   const onSyncIntervalChange = (value: number) => {
@@ -101,19 +110,74 @@ const WebDavSettings: FC = () => {
     dispatch(_setWebdavDisableStream(value))
   }
 
-  const { isModalVisible, handleBackup, handleCancel, backuping, customFileName, setCustomFileName, showBackupModal } =
-    useWebdavBackupModal()
+  const commitCurrentSettings = useCallback(() => {
+    dispatch(_setWebdavHost(webdavHost || ''))
+    dispatch(_setWebdavUser(webdavUser || ''))
+    dispatch(_setWebdavPass(webdavPass || ''))
+    dispatch(_setWebdavPath(webdavPath || ''))
+  }, [dispatch, webdavHost, webdavPass, webdavPath, webdavUser])
 
-  const showBackupManager = () => {
-    setBackupManagerVisible(true)
-  }
+  const getCommittedWebdavConfig = (): WebDavConfig | null => {
+    if (!webdavHost) {
+      window.toast.error(t('message.error.invalid.webdav'))
+      return null
+    }
 
-  const closeBackupManager = () => {
-    setBackupManagerVisible(false)
+    return {
+      webdavHost,
+      webdavUser,
+      webdavPass,
+      webdavPath,
+      skipBackupFile: webdavSkipBackupFile,
+      disableStream: webdavDisableStream
+    }
   }
 
   const isSyncConfigured = Boolean(webdavHost)
   const isAutoSyncEnabled = Boolean(webdavAutoSync && syncInterval > 0)
+
+  const openBackupModal = async () => {
+    commitCurrentSettings()
+    setBackupType('pc')
+    setBackupFileName(await buildBackupArtifactFileName('pc'))
+    setBackupModalVisible(true)
+  }
+
+  const handleBackupTypeChange = async (value: BackupArtifactType) => {
+    setBackupType(value)
+    setBackupFileName(await buildBackupArtifactFileName(value))
+  }
+
+  const handleBackup = async () => {
+    commitCurrentSettings()
+    const committedWebdavConfig = getCommittedWebdavConfig()
+    if (!committedWebdavConfig) {
+      return
+    }
+
+    setBackuping(true)
+    try {
+      if (backupType === 'app') {
+        const fileName = await uploadMobileSyncToWebdav(committedWebdavConfig, backupFileName)
+        window.toast.success(t('settings.data.webdav.mobile_sync.upload.success', { fileName }))
+      } else {
+        await backupToWebdavWithConfig(committedWebdavConfig, {
+          showMessage: true,
+          customFileName: backupFileName
+        })
+      }
+      setBackupModalVisible(false)
+    } catch (error) {
+      window.toast.error((error as Error).message)
+    } finally {
+      setBackuping(false)
+    }
+  }
+
+  const openRestoreManager = () => {
+    commitCurrentSettings()
+    setManagerType('pc')
+  }
 
   return (
     <SettingGroup theme={theme}>
@@ -165,18 +229,20 @@ const WebDavSettings: FC = () => {
       </SettingRow>
       <SettingDivider />
       <SettingRow>
-        <SettingRowTitle>{t('settings.data.auto_sync.manual.label')}</SettingRowTitle>
+        <SettingRowTitle>{t('settings.data.artifact_type.cross_device_title')}</SettingRowTitle>
         <HStack gap="5px" justifyContent="space-between">
-          <Button onClick={showBackupModal} icon={<SaveOutlined />} loading={backuping}>
+          {/* WebDAV exposes the same PC / APP choice as local backup, but APP still
+              uploads a shared-data JSON instead of a migration ZIP so cloud sync stays portable. */}
+          <Button onClick={() => void openBackupModal()} icon={<SaveOutlined />} loading={backuping}>
             {t('settings.data.webdav.backup.button')}
           </Button>
-          <Button onClick={showBackupManager} icon={<FolderOpenOutlined />} disabled={!webdavHost}>
+          <Button onClick={openRestoreManager} icon={<FolderOpenOutlined />} disabled={!webdavHost}>
             {t('settings.data.webdav.restore.button')}
           </Button>
         </HStack>
       </SettingRow>
       <SettingRow>
-        <SettingHelpText>{t('settings.data.auto_sync.manual.help')}</SettingHelpText>
+        <SettingHelpText>{t('settings.data.artifact_type.cross_device_help')}</SettingHelpText>
       </SettingRow>
       <SettingDivider />
       <ManualSyncScheduleSettings provider="webdav" isConfigured={isSyncConfigured} />
@@ -245,18 +311,9 @@ const WebDavSettings: FC = () => {
         </>
       )}
       <>
-        <WebdavBackupModal
-          isModalVisible={isModalVisible}
-          handleBackup={handleBackup}
-          handleCancel={handleCancel}
-          backuping={backuping}
-          customFileName={customFileName}
-          setCustomFileName={setCustomFileName}
-        />
-
         <WebdavBackupManager
-          visible={backupManagerVisible}
-          onClose={closeBackupManager}
+          visible={managerType !== null}
+          onClose={() => setManagerType(null)}
           webdavConfig={{
             webdavHost,
             webdavUser,
@@ -264,6 +321,43 @@ const WebDavSettings: FC = () => {
             webdavPath,
             webdavDisableStream
           }}
+          fileFilter={managerType === 'app' ? (file) => isMobileSyncRemoteFile(file.fileName) : undefined}
+          restoreMethod={(fileName) =>
+            (() => {
+              const committedWebdavConfig = getCommittedWebdavConfig()
+              if (!committedWebdavConfig) {
+                throw new Error(t('message.error.invalid.webdav'))
+              }
+
+              return managerType === 'app'
+                ? importMobileSyncFromWebdav(committedWebdavConfig, fileName)
+                : restoreFromWebdavWithConfig(committedWebdavConfig, fileName)
+            })()
+          }
+          artifactType={managerType || 'pc'}
+          onArtifactTypeChange={(value) => setManagerType(value)}
+          customLabels={{
+            managerTitle: t('settings.data.artifact_type.cross_device_title'),
+            managerEmptyText: managerType === 'app' ? t('settings.data.webdav.mobile_sync.manager.empty') : undefined,
+            restoreConfirmTitle:
+              managerType === 'app' ? t('settings.data.webdav.mobile_sync.restore.confirm.title') : undefined,
+            restoreConfirmContent:
+              managerType === 'app' ? t('settings.data.webdav.mobile_sync.restore.confirm.content') : undefined,
+            restoreSuccessMessage:
+              managerType === 'app' ? t('settings.data.webdav.mobile_sync.restore.success') : undefined
+          }}
+        />
+
+        <BackupTypeModal
+          open={backupModalVisible}
+          mode="backup"
+          artifactType={backupType}
+          onArtifactTypeChange={(value) => void handleBackupTypeChange(value)}
+          onConfirm={() => void handleBackup()}
+          onCancel={() => setBackupModalVisible(false)}
+          loading={backuping}
+          fileName={backupFileName}
+          onFileNameChange={setBackupFileName}
         />
       </>
     </SettingGroup>

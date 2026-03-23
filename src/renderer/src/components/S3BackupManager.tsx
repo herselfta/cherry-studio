@@ -1,5 +1,9 @@
 import { DeleteOutlined, ExclamationCircleOutlined, ReloadOutlined } from '@ant-design/icons'
-import { LEGACY_INTERNAL_BACKUP_FILE_NAME, restoreFromS3 } from '@renderer/services/BackupService'
+import {
+  isMigrationBackupFile,
+  LEGACY_INTERNAL_BACKUP_FILE_NAME,
+  restoreFromS3
+} from '@renderer/services/BackupService'
 import type { S3Config } from '@renderer/types'
 import { formatFileSize } from '@renderer/utils'
 import { Button, Modal, Space, Table, Tooltip } from 'antd'
@@ -55,7 +59,9 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
         syncInterval: 0,
         maxBackups: 0
       })
-      const visibleFiles = files.filter((file) => file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME)
+      const visibleFiles = files.filter(
+        (file) => file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME && isMigrationBackupFile(file.fileName)
+      )
       setBackupFiles(visibleFiles)
       setPagination((prev) => ({
         ...prev,

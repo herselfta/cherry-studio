@@ -189,6 +189,11 @@ const api = {
       ipcRenderer.invoke(IpcChannel.Backup_DeleteWebdavFile, fileName, webdavConfig),
     backupToLocalDir: (fileName: string, localConfig: { localBackupDir?: string; skipBackupFile?: boolean }) =>
       ipcRenderer.invoke(IpcChannel.Backup_BackupToLocalDir, fileName, localConfig),
+    backupMigrationToLocalDir: (
+      fileName: string,
+      data: string,
+      localConfig: { localBackupDir?: string; skipBackupFile?: boolean }
+    ) => ipcRenderer.invoke(IpcChannel.Backup_BackupMigrationToLocalDir, fileName, data, localConfig),
     restoreFromLocalBackup: (fileName: string, localBackupDir?: string) =>
       ipcRenderer.invoke(IpcChannel.Backup_RestoreFromLocalBackup, fileName, localBackupDir),
     listLocalBackupFiles: (localBackupDir?: string) =>
@@ -198,6 +203,8 @@ const api = {
     checkWebdavConnection: (webdavConfig: WebDavConfig) =>
       ipcRenderer.invoke(IpcChannel.Backup_CheckConnection, webdavConfig),
     backupToS3: (s3Config: S3Config) => ipcRenderer.invoke(IpcChannel.Backup_BackupToS3, s3Config),
+    backupMigrationToS3: (s3Config: S3Config, data: string) =>
+      ipcRenderer.invoke(IpcChannel.Backup_BackupMigrationToS3, s3Config, data),
     restoreFromS3: (s3Config: S3Config) => ipcRenderer.invoke(IpcChannel.Backup_RestoreFromS3, s3Config),
     listS3Files: (s3Config: S3Config) => ipcRenderer.invoke(IpcChannel.Backup_ListS3Files, s3Config),
     deleteS3File: (fileName: string, s3Config: S3Config) =>
@@ -205,6 +212,12 @@ const api = {
     checkS3Connection: (s3Config: S3Config) => ipcRenderer.invoke(IpcChannel.Backup_CheckS3Connection, s3Config),
     createLanTransferBackup: (data: string, destinationPath?: string): Promise<string> =>
       ipcRenderer.invoke(IpcChannel.Backup_CreateLanTransferBackup, data, destinationPath),
+    backupMigrationToWebdav: (webdavConfig: WebDavConfig, data: string) =>
+      ipcRenderer.invoke(IpcChannel.Backup_BackupMigrationToWebdav, webdavConfig, data),
+    uploadTextToWebdav: (webdavConfig: WebDavConfig, data: string) =>
+      ipcRenderer.invoke(IpcChannel.Backup_UploadTextToWebdav, webdavConfig, data),
+    downloadTextFromWebdav: (webdavConfig: WebDavConfig) =>
+      ipcRenderer.invoke(IpcChannel.Backup_DownloadTextFromWebdav, webdavConfig),
     deleteLanTransferBackup: (filePath: string): Promise<boolean> =>
       ipcRenderer.invoke(IpcChannel.Backup_DeleteLanTransferBackup, filePath)
   },

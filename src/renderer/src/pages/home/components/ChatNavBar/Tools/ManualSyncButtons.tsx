@@ -1,7 +1,7 @@
 import SidebarActionIcon from '@renderer/components/app/SidebarActionIcon'
+import BackupTypeModal, { type BackupArtifactType } from '@renderer/components/BackupTypeModal'
 import { HStack } from '@renderer/components/Layout'
 import { LocalBackupManager } from '@renderer/components/LocalBackupManager'
-import { LocalBackupModal, useLocalBackupModal } from '@renderer/components/LocalBackupModals'
 import NavbarIcon from '@renderer/components/NavbarIcon'
 import { S3BackupManager } from '@renderer/components/S3BackupManager'
 import { S3BackupModal, useS3BackupModal } from '@renderer/components/S3Modals'
@@ -9,15 +9,29 @@ import { WebdavBackupManager } from '@renderer/components/WebdavBackupManager'
 import { useWebdavBackupModal, WebdavBackupModal } from '@renderer/components/WebdavModals'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
+import {
+  backupMigrationToLocal,
+  backupToWebdavWithConfig,
+  isMigrationBackupFile,
+  restoreFromWebdavWithConfig,
+  restoreMigrationFromLocal
+} from '@renderer/services/BackupService'
+import { buildBackupArtifactFileName } from '@renderer/services/BackupArtifactService'
 import { backupToNutstore, restoreFromNutstore } from '@renderer/services/NutstoreService'
+import {
+  backupMobileSyncToLocal,
+  importMobileSyncFromWebdav,
+  isMobileSyncRemoteFile,
+  restoreMobileSyncFromLocal,
+  uploadMobileSyncToWebdav
+} from '@renderer/services/MobileSyncService'
 import { useAppSelector } from '@renderer/store'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
 import { Dropdown, Tooltip } from 'antd'
 import type { ItemType } from 'antd/es/menu/interface'
 import { Download, Upload } from 'lucide-react'
-import type { FC } from 'react'
-import type { ReactNode } from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import type { FC, ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { styled } from 'styled-components'
 
@@ -25,6 +39,9 @@ interface ManualSyncButtonsProps {
   orientation?: 'horizontal' | 'vertical'
   className?: string
 }
+
+type QuickProvider = 'webdav' | 'local'
+type BackupManagerType = 'webdav' | 'local' | 's3' | 'nutstore' | null
 
 const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizontal', className }) => {
   const { t } = useTranslation()
@@ -34,18 +51,16 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
   const isVertical = orientation === 'vertical'
 
   const [resolvedLocalBackupDir, setResolvedLocalBackupDir] = useState<string | undefined>(undefined)
-  const [backupManagerType, setBackupManagerType] = useState<'webdav' | 'local' | 's3' | 'nutstore' | null>(null)
+  const [backupManagerType, setBackupManagerType] = useState<BackupManagerType>(null)
   const [nutstoreAuth, setNutstoreAuth] = useState<{ username: string; accessToken: string } | null>(null)
+  const [quickModalVisible, setQuickModalVisible] = useState(false)
+  const [quickProvider, setQuickProvider] = useState<QuickProvider>('webdav')
+  const [quickArtifactType, setQuickArtifactType] = useState<BackupArtifactType>('pc')
+  const [quickFileName, setQuickFileName] = useState('')
+  const [quickLoading, setQuickLoading] = useState(false)
+  const [webdavRestoreArtifactType, setWebdavRestoreArtifactType] = useState<BackupArtifactType>('pc')
+  const [localRestoreArtifactType, setLocalRestoreArtifactType] = useState<BackupArtifactType>('pc')
 
-  const {
-    isModalVisible: isWebdavBackupModalVisible,
-    handleBackup: handleWebdavBackup,
-    handleCancel: handleCancelWebdavBackup,
-    backuping: webdavBackuping,
-    customFileName: webdavFileName,
-    setCustomFileName: setWebdavFileName,
-    showBackupModal: showWebdavBackupModal
-  } = useWebdavBackupModal()
   const {
     isModalVisible: isNutstoreBackupModalVisible,
     handleBackup: handleNutstoreBackup,
@@ -64,15 +79,6 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
     setCustomFileName: setS3FileName,
     showBackupModal: showS3BackupModal
   } = useS3BackupModal()
-  const {
-    isModalVisible: isLocalBackupModalVisible,
-    handleBackup: handleLocalBackup,
-    handleCancel: handleCancelLocalBackup,
-    backuping: localBackuping,
-    customFileName: localFileName,
-    setCustomFileName: setLocalFileName,
-    showBackupModal: showLocalBackupModal
-  } = useLocalBackupModal(resolvedLocalBackupDir)
 
   useEffect(() => {
     if (!settings.localBackupDir) {
@@ -113,6 +119,60 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
   )
   const isNutstoreConfigured = Boolean(nutstoreToken && nutstorePath && nutstoreAuth)
 
+  const currentWebdavConfig = {
+    webdavHost: settings.webdavHost,
+    webdavUser: settings.webdavUser,
+    webdavPass: settings.webdavPass,
+    webdavPath: settings.webdavPath,
+    skipBackupFile: settings.webdavSkipBackupFile,
+    disableStream: settings.webdavDisableStream
+  }
+
+  const openQuickModal = useCallback(async (provider: QuickProvider) => {
+    setQuickProvider(provider)
+    setQuickArtifactType('pc')
+    setQuickFileName(await buildBackupArtifactFileName('pc'))
+    setQuickModalVisible(true)
+  }, [])
+
+  const handleQuickArtifactTypeChange = async (value: BackupArtifactType) => {
+    setQuickArtifactType(value)
+    setQuickFileName(await buildBackupArtifactFileName(value))
+  }
+
+  const handleQuickConfirm = async () => {
+    setQuickLoading(true)
+    try {
+      if (quickProvider === 'local') {
+        if (quickArtifactType === 'app') {
+          await backupMobileSyncToLocal({
+            showMessage: true,
+            customFileName: quickFileName
+          })
+        } else {
+          await backupMigrationToLocal({
+            showMessage: true,
+            customFileName: quickFileName
+          })
+        }
+      } else if (quickArtifactType === 'app') {
+        const fileName = await uploadMobileSyncToWebdav(currentWebdavConfig, quickFileName)
+        window.toast.success(t('settings.data.webdav.mobile_sync.upload.success', { fileName }))
+      } else {
+        await backupToWebdavWithConfig(currentWebdavConfig, {
+          showMessage: true,
+          customFileName: quickFileName
+        })
+      }
+
+      setQuickModalVisible(false)
+    } catch (error) {
+      window.toast.error((error as Error).message)
+    } finally {
+      setQuickLoading(false)
+    }
+  }
+
   const uploadItems = useMemo<ItemType[]>(
     () => [
       {
@@ -120,7 +180,7 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
         label: t('settings.data.manual_schedule.providers.webdav'),
         disabled: !isWebdavConfigured,
         onClick: () => {
-          void showWebdavBackupModal()
+          void openQuickModal('webdav')
         }
       },
       {
@@ -128,7 +188,7 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
         label: t('settings.data.manual_schedule.providers.local'),
         disabled: !isLocalConfigured,
         onClick: () => {
-          void showLocalBackupModal()
+          void openQuickModal('local')
         }
       },
       {
@@ -153,10 +213,9 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
       isNutstoreConfigured,
       isS3Configured,
       isWebdavConfigured,
-      showLocalBackupModal,
+      openQuickModal,
       showNutstoreBackupModal,
       showS3BackupModal,
-      showWebdavBackupModal,
       t
     ]
   )
@@ -167,13 +226,19 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
         key: 'restore-webdav',
         label: t('settings.data.manual_schedule.providers.webdav'),
         disabled: !isWebdavConfigured,
-        onClick: () => setBackupManagerType('webdav')
+        onClick: () => {
+          setWebdavRestoreArtifactType('pc')
+          setBackupManagerType('webdav')
+        }
       },
       {
         key: 'restore-local',
         label: t('settings.data.manual_schedule.providers.local'),
         disabled: !isLocalConfigured,
-        onClick: () => setBackupManagerType('local')
+        onClick: () => {
+          setLocalRestoreArtifactType('pc')
+          setBackupManagerType('local')
+        }
       },
       {
         key: 'restore-s3',
@@ -235,14 +300,6 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
       </HStack>
 
       <WebdavBackupModal
-        isModalVisible={isWebdavBackupModalVisible}
-        handleBackup={handleWebdavBackup}
-        handleCancel={handleCancelWebdavBackup}
-        backuping={webdavBackuping}
-        customFileName={webdavFileName}
-        setCustomFileName={setWebdavFileName}
-      />
-      <WebdavBackupModal
         isModalVisible={isNutstoreBackupModalVisible}
         handleBackup={handleNutstoreBackup}
         handleCancel={handleCancelNutstoreBackup}
@@ -262,14 +319,6 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
         customFileName={s3FileName}
         setCustomFileName={setS3FileName}
       />
-      <LocalBackupModal
-        isModalVisible={isLocalBackupModalVisible}
-        handleBackup={handleLocalBackup}
-        handleCancel={handleCancelLocalBackup}
-        backuping={localBackuping}
-        customFileName={localFileName}
-        setCustomFileName={setLocalFileName}
-      />
 
       <WebdavBackupManager
         visible={backupManagerType === 'webdav'}
@@ -281,11 +330,43 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
           webdavPath: settings.webdavPath,
           webdavDisableStream: settings.webdavDisableStream
         }}
+        fileFilter={webdavRestoreArtifactType === 'app' ? (file) => isMobileSyncRemoteFile(file.fileName) : undefined}
+        restoreMethod={(fileName) =>
+          webdavRestoreArtifactType === 'app'
+            ? importMobileSyncFromWebdav(currentWebdavConfig, fileName)
+            : restoreFromWebdavWithConfig(currentWebdavConfig, fileName)
+        }
+        artifactType={webdavRestoreArtifactType}
+        onArtifactTypeChange={(value) => setWebdavRestoreArtifactType(value)}
+        customLabels={{
+          managerTitle: t('settings.data.artifact_type.cross_device_title'),
+          managerEmptyText:
+            webdavRestoreArtifactType === 'app' ? t('settings.data.webdav.mobile_sync.manager.empty') : undefined,
+          restoreConfirmTitle:
+            webdavRestoreArtifactType === 'app'
+              ? t('settings.data.webdav.mobile_sync.restore.confirm.title')
+              : undefined,
+          restoreConfirmContent:
+            webdavRestoreArtifactType === 'app'
+              ? t('settings.data.webdav.mobile_sync.restore.confirm.content')
+              : undefined,
+          restoreSuccessMessage:
+            webdavRestoreArtifactType === 'app' ? t('settings.data.webdav.mobile_sync.restore.success') : undefined
+        }}
       />
       <LocalBackupManager
         visible={backupManagerType === 'local'}
         onClose={() => setBackupManagerType(null)}
         localBackupDir={resolvedLocalBackupDir}
+        restoreMethod={localRestoreArtifactType === 'app' ? restoreMobileSyncFromLocal : restoreMigrationFromLocal}
+        fileFilter={(fileName) =>
+          localRestoreArtifactType === 'app' ? isMobileSyncRemoteFile(fileName) : isMigrationBackupFile(fileName)
+        }
+        artifactType={localRestoreArtifactType}
+        onArtifactTypeChange={(value) => setLocalRestoreArtifactType(value)}
+        customLabels={{
+          title: t('settings.data.artifact_type.cross_device_title')
+        }}
       />
       <S3BackupManager
         visible={backupManagerType === 's3'}
@@ -307,6 +388,18 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
           restoreConfirmContent: t('settings.data.nutstore.restore.confirm.content'),
           invalidConfigMessage: t('message.error.invalid.nutstore')
         }}
+      />
+
+      <BackupTypeModal
+        open={quickModalVisible}
+        mode="backup"
+        artifactType={quickArtifactType}
+        onArtifactTypeChange={(value) => void handleQuickArtifactTypeChange(value)}
+        onConfirm={() => void handleQuickConfirm()}
+        onCancel={() => setQuickModalVisible(false)}
+        loading={quickLoading}
+        fileName={quickFileName}
+        onFileNameChange={setQuickFileName}
       />
     </>
   )

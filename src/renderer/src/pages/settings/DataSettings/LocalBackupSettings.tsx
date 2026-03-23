@@ -1,12 +1,25 @@
 import { DeleteOutlined, FolderOpenOutlined, SaveOutlined } from '@ant-design/icons'
 import { loggerService } from '@logger'
+import BackupTypeModal, { type BackupArtifactType } from '@renderer/components/BackupTypeModal'
 import { HStack } from '@renderer/components/Layout'
 import { LocalBackupManager } from '@renderer/components/LocalBackupManager'
 import { LocalBackupModal, useLocalBackupModal } from '@renderer/components/LocalBackupModals'
 import Selector from '@renderer/components/Selector'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
-import { startAutoBackup, stopAutoBackup } from '@renderer/services/BackupService'
+import {
+  backupMigrationToLocal,
+  isMigrationBackupFile,
+  restoreMigrationFromLocal,
+  startAutoBackup,
+  stopAutoBackup
+} from '@renderer/services/BackupService'
+import { buildBackupArtifactFileName } from '@renderer/services/BackupArtifactService'
+import {
+  backupMobileSyncToLocal,
+  isMobileSyncRemoteFile,
+  restoreMobileSyncFromLocal
+} from '@renderer/services/MobileSyncService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import {
   setLocalBackupAutoSync,
@@ -47,6 +60,11 @@ const LocalBackupSettings: React.FC = () => {
   const [resolvedLocalBackupDir, setResolvedLocalBackupDir] = useState<string | undefined>(undefined)
   const [localBackupSkipBackupFile, setLocalBackupSkipBackupFile] = useState<boolean>(localBackupSkipBackupFileSetting)
   const [backupManagerVisible, setBackupManagerVisible] = useState(false)
+  const [crossDeviceBackupModalVisible, setCrossDeviceBackupModalVisible] = useState(false)
+  const [crossDeviceBackuping, setCrossDeviceBackuping] = useState(false)
+  const [crossDeviceBackupType, setCrossDeviceBackupType] = useState<BackupArtifactType>('pc')
+  const [crossDeviceManagerType, setCrossDeviceManagerType] = useState<BackupArtifactType | null>(null)
+  const [crossDeviceFileName, setCrossDeviceFileName] = useState('')
 
   const [syncInterval, setSyncInterval] = useState<number>(localBackupSyncIntervalSetting)
   const [maxBackups, setMaxBackups] = useState<number>(localBackupMaxBackupsSetting)
@@ -64,9 +82,7 @@ const LocalBackupSettings: React.FC = () => {
   }, [localBackupDirSetting])
 
   const { theme } = useTheme()
-
   const { t } = useTranslation()
-
   const { localBackupSync } = useAppSelector((state) => state.backup)
 
   const onSyncIntervalChange = (value: number) => {
@@ -98,21 +114,16 @@ const LocalBackupSettings: React.FC = () => {
 
     const resolvedDir = await window.api.resolvePath(dir)
 
-    // check new local backup dir is not in app data path
-    // if is in app data path, show error
     if (await window.api.isPathInside(resolvedDir, appInfo!.appDataPath)) {
       window.toast.error(t('settings.data.local.directory.select_error_app_data_path'))
       return false
     }
 
-    // check new local backup dir is not in app install path
-    // if is in app install path, show error
     if (await window.api.isPathInside(resolvedDir, appInfo!.installPath)) {
       window.toast.error(t('settings.data.local.directory.select_error_in_app_install_path'))
       return false
     }
 
-    // check new app data path has write permission
     const hasWritePermission = await window.api.hasWritePermission(resolvedDir)
     if (!hasWritePermission) {
       window.toast.error(t('settings.data.local.directory.select_error_write_permission'))
@@ -145,7 +156,6 @@ const LocalBackupSettings: React.FC = () => {
 
     if (localBackupDirSetting) {
       setLocalBackupDir(localBackupDirSetting)
-      return
     }
   }
 
@@ -194,8 +204,51 @@ const LocalBackupSettings: React.FC = () => {
     setBackupManagerVisible(false)
   }
 
+  const closeCrossDeviceManager = () => {
+    setCrossDeviceManagerType(null)
+  }
+
   const isSyncConfigured = Boolean(localBackupDir)
   const isAutoSyncEnabled = Boolean(localBackupAutoSyncSetting && syncInterval > 0)
+
+  const openCrossDeviceBackupModal = async () => {
+    setCrossDeviceBackupType('pc')
+    setCrossDeviceFileName(await buildBackupArtifactFileName('pc'))
+    setCrossDeviceBackupModalVisible(true)
+  }
+
+  const handleCrossDeviceBackupTypeChange = async (value: BackupArtifactType) => {
+    setCrossDeviceBackupType(value)
+    setCrossDeviceFileName(await buildBackupArtifactFileName(value))
+  }
+
+  const handleCrossDeviceBackup = async () => {
+    setCrossDeviceBackuping(true)
+    try {
+      if (crossDeviceBackupType === 'app') {
+        await backupMobileSyncToLocal({
+          showMessage: true,
+          customFileName: crossDeviceFileName
+        })
+      } else {
+        await backupMigrationToLocal({
+          showMessage: true,
+          customFileName: crossDeviceFileName
+        })
+      }
+
+      setCrossDeviceBackupModalVisible(false)
+    } catch (error) {
+      logger.error('Failed to run cross-device local backup:', error as Error)
+      window.toast.error((error as Error).message)
+    } finally {
+      setCrossDeviceBackuping(false)
+    }
+  }
+
+  const openCrossDeviceRestoreManager = () => {
+    setCrossDeviceManagerType('pc')
+  }
 
   return (
     <SettingGroup theme={theme}>
@@ -207,7 +260,7 @@ const LocalBackupSettings: React.FC = () => {
           <Input
             value={localBackupDir}
             onChange={(e) => setLocalBackupDir(e.target.value)}
-            onBlur={(e) => handleLocalBackupDirChange(e.target.value)}
+            onBlur={(e) => void handleLocalBackupDirChange(e.target.value)}
             placeholder={t('settings.data.local.directory.placeholder')}
             style={{ minWidth: 200, maxWidth: 400, flex: 1 }}
           />
@@ -231,8 +284,22 @@ const LocalBackupSettings: React.FC = () => {
           </Button>
         </HStack>
       </SettingRow>
+      <SettingDivider />
       <SettingRow>
-        <SettingHelpText>{t('settings.data.auto_sync.manual.help')}</SettingHelpText>
+        <SettingRowTitle>{t('settings.data.artifact_type.cross_device_title')}</SettingRowTitle>
+        <HStack gap="5px" justifyContent="space-between">
+          {/* Cross-device backup keeps one UX entry on desktop, but the modal still
+              splits into a full PC migration package and an APP shared-data sync package. */}
+          <Button onClick={() => void openCrossDeviceBackupModal()} icon={<SaveOutlined />} disabled={!localBackupDir}>
+            {t('settings.data.local.backup.button')}
+          </Button>
+          <Button onClick={openCrossDeviceRestoreManager} icon={<FolderOpenOutlined />} disabled={!localBackupDir}>
+            {t('settings.data.local.restore.button')}
+          </Button>
+        </HStack>
+      </SettingRow>
+      <SettingRow>
+        <SettingHelpText>{t('settings.data.artifact_type.cross_device_help')}</SettingHelpText>
       </SettingRow>
       <SettingDivider />
       <ManualSyncScheduleSettings provider="local" isConfigured={isSyncConfigured} />
@@ -306,6 +373,33 @@ const LocalBackupSettings: React.FC = () => {
           visible={backupManagerVisible}
           onClose={closeBackupManager}
           localBackupDir={resolvedLocalBackupDir}
+          fileFilter={(fileName) => !isMigrationBackupFile(fileName) && !isMobileSyncRemoteFile(fileName)}
+        />
+        <LocalBackupManager
+          visible={crossDeviceManagerType !== null}
+          onClose={closeCrossDeviceManager}
+          localBackupDir={resolvedLocalBackupDir}
+          restoreMethod={crossDeviceManagerType === 'app' ? restoreMobileSyncFromLocal : restoreMigrationFromLocal}
+          fileFilter={(fileName) =>
+            crossDeviceManagerType === 'app' ? isMobileSyncRemoteFile(fileName) : isMigrationBackupFile(fileName)
+          }
+          artifactType={crossDeviceManagerType || 'pc'}
+          onArtifactTypeChange={(value) => setCrossDeviceManagerType(value)}
+          customLabels={{
+            title: t('settings.data.artifact_type.cross_device_title')
+          }}
+        />
+
+        <BackupTypeModal
+          open={crossDeviceBackupModalVisible}
+          mode="backup"
+          artifactType={crossDeviceBackupType}
+          onArtifactTypeChange={(value) => void handleCrossDeviceBackupTypeChange(value)}
+          onConfirm={() => void handleCrossDeviceBackup()}
+          onCancel={() => setCrossDeviceBackupModalVisible(false)}
+          loading={crossDeviceBackuping}
+          fileName={crossDeviceFileName}
+          onFileNameChange={setCrossDeviceFileName}
         />
       </>
     </SettingGroup>

@@ -18,6 +18,14 @@ import { NotificationService } from './NotificationService'
 const logger = loggerService.withContext('BackupService')
 
 export const LEGACY_INTERNAL_BACKUP_FILE_NAME = 'cherry-studio.sync.zip'
+export const MIGRATION_BACKUP_MARKER = '.migration.'
+
+export function isMigrationBackupFile(fileName: string) {
+  // Migration backups intentionally keep using the legacy logical export format.
+  // We tag new files explicitly so the local UI can separate portable archives from
+  // same-platform direct snapshots and avoid restoring the wrong format by mistake.
+  return fileName.includes(MIGRATION_BACKUP_MARKER) || fileName === LEGACY_INTERNAL_BACKUP_FILE_NAME
+}
 
 // 重试删除S3文件的辅助函数
 async function deleteS3FileWithRetry(fileName: string, s3Config: S3Config, maxRetries = 3) {
@@ -227,11 +235,13 @@ export async function backupToWebdav({
   }
   const timestamp = dayjs().format('YYYYMMDDHHmmss')
   const backupFileName = customFileName || `cherry-studio.${timestamp}.${hostname}.${deviceType}.zip`
-  const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
+  const migrationFileName = backupFileName.replace('cherry-studio.', `cherry-studio${MIGRATION_BACKUP_MARKER}`)
+  const finalFileName = migrationFileName.endsWith('.zip') ? migrationFileName : `${migrationFileName}.zip`
 
-  // 上传文件 - Use direct backup method (copy IndexedDB/LocalStorage directories)
+  // Remote backups must stay cross-platform portable. Do not switch WebDAV back to
+  // direct backup snapshots unless cross-platform restore is intentionally dropped.
   try {
-    const success = await window.api.backup.backupToWebdav({
+    const success = await window.api.backup.backupMigrationToWebdav({
       webdavHost,
       webdavUser,
       webdavPass,
@@ -239,7 +249,7 @@ export async function backupToWebdav({
       fileName: finalFileName,
       skipBackupFile: webdavSkipBackupFile,
       disableStream: webdavDisableStream
-    })
+    }, await getBackupData())
     if (success) {
       store.dispatch(
         setWebDAVSyncState({
@@ -272,10 +282,12 @@ export async function backupToWebdav({
           })
 
           // 筛选当前设备的备份文件
-          const currentDeviceFiles = files.filter((file) => {
-            // 检查文件名是否包含当前设备的标识信息
-            return file.fileName.includes(deviceType) && file.fileName.includes(hostname)
-          })
+          const currentDeviceFiles = files.filter(
+            (file) =>
+              file.fileName.includes(deviceType) &&
+              file.fileName.includes(hostname) &&
+              isMigrationBackupFile(file.fileName)
+          )
 
           // 如果当前设备的备份文件数量超过最大保留数量，删除最旧的文件
           if (currentDeviceFiles.length > webdavMaxBackups) {
@@ -345,21 +357,170 @@ export async function backupToWebdav({
   }
 }
 
+export async function backupToWebdavWithConfig(
+  webdavConfig: WebDavConfig,
+  {
+    showMessage = false,
+    customFileName = '',
+    autoBackupProcess = false
+  }: {
+    showMessage?: boolean
+    customFileName?: string
+    autoBackupProcess?: boolean
+  } = {}
+) {
+  const notificationService = NotificationService.getInstance()
+  if (isManualBackupRunning) {
+    logger.verbose('Manual backup already in progress')
+    return
+  }
+
+  if (autoBackupProcess) {
+    showMessage = false
+  }
+
+  const shouldNotify = showMessage && !autoBackupProcess
+
+  isManualBackupRunning = true
+
+  store.dispatch(setWebDAVSyncState({ syncing: true, lastSyncError: null }))
+
+  const { webdavMaxBackups } = store.getState().settings
+  let deviceType = 'unknown'
+  let hostname = 'unknown'
+
+  try {
+    deviceType = (await window.api.system.getDeviceType()) || 'unknown'
+    hostname = (await window.api.system.getHostname()) || 'unknown'
+  } catch (error) {
+    logger.error('Failed to get device type or hostname:', error as Error)
+  }
+
+  const timestamp = dayjs().format('YYYYMMDDHHmmss')
+  const backupFileName = customFileName || `cherry-studio.${timestamp}.${hostname}.${deviceType}.zip`
+  const migrationFileName = backupFileName.replace('cherry-studio.', `cherry-studio${MIGRATION_BACKUP_MARKER}`)
+  const finalFileName = migrationFileName.endsWith('.zip') ? migrationFileName : `${migrationFileName}.zip`
+
+  try {
+    const success = await window.api.backup.backupMigrationToWebdav({
+      ...webdavConfig,
+      fileName: finalFileName
+    }, await getBackupData())
+
+    if (success) {
+      store.dispatch(
+        setWebDAVSyncState({
+          lastSyncError: null
+        })
+      )
+
+      if (shouldNotify) {
+        notificationService.send({
+          id: uuid(),
+          type: 'success',
+          title: i18n.t('common.success'),
+          message: i18n.t('message.backup.success'),
+          silent: false,
+          timestamp: Date.now(),
+          source: 'backup',
+          channel: 'system'
+        })
+      }
+
+      if (webdavMaxBackups > 0) {
+        try {
+          const files = await window.api.backup.listWebdavFiles(webdavConfig)
+          const currentDeviceFiles = files
+            .filter(
+              (file) =>
+                file.fileName.startsWith(`cherry-studio${MIGRATION_BACKUP_MARKER}`) && file.fileName.endsWith('.zip')
+            )
+            .sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
+
+          if (currentDeviceFiles.length > webdavMaxBackups) {
+            const filesToDelete = currentDeviceFiles.slice(webdavMaxBackups)
+
+            await Promise.all(
+              filesToDelete.map((file) =>
+                deleteWebdavFileWithRetry(file.fileName, webdavConfig).catch((error) => {
+                  logger.error(`[WebDAV] Failed to delete old backup file ${file.fileName}:`, error)
+                })
+              )
+            )
+          }
+        } catch (error) {
+          logger.error('[WebDAV] Failed to cleanup old backup files:', error as Error)
+        }
+      }
+    } else {
+      store.dispatch(setWebDAVSyncState({ lastSyncError: 'Backup failed' }))
+      if (shouldNotify) {
+        notificationService.send({
+          id: uuid(),
+          type: 'error',
+          title: i18n.t('common.error'),
+          message: i18n.t('message.backup.failed'),
+          silent: false,
+          timestamp: Date.now(),
+          source: 'backup',
+          channel: 'system'
+        })
+      }
+      throw new Error(i18n.t('message.backup.failed'))
+    }
+  } catch (error: any) {
+    store.dispatch(setWebDAVSyncState({ lastSyncError: error.message }))
+    logger.error('[Backup] backupToWebdavWithConfig: Error uploading file to WebDAV:', error)
+    if (shouldNotify) {
+      notificationService.send({
+        id: uuid(),
+        type: 'error',
+        title: i18n.t('common.error'),
+        message: error.message || i18n.t('message.backup.failed'),
+        silent: false,
+        timestamp: Date.now(),
+        source: 'backup',
+        channel: 'system'
+      })
+    }
+    throw error
+  } finally {
+    if (!autoBackupProcess) {
+      store.dispatch(
+        setWebDAVSyncState({
+          lastSyncTime: Date.now(),
+          syncing: false
+        })
+      )
+    }
+    isManualBackupRunning = false
+  }
+}
+
 // 从 webdav 恢复
 export async function restoreFromWebdav(fileName?: string) {
   const { webdavHost, webdavUser, webdavPass, webdavPath } = store.getState().settings
+  await restoreFromWebdavWithConfig(
+    {
+      webdavHost,
+      webdavUser,
+      webdavPass,
+      webdavPath
+    },
+    fileName
+  )
+}
+
+export async function restoreFromWebdavWithConfig(webdavConfig: WebDavConfig, fileName?: string) {
   let data = ''
 
   try {
     data = await window.api.backup.restoreFromWebdav({
-      webdavHost,
-      webdavUser,
-      webdavPass,
-      webdavPath,
+      ...webdavConfig,
       fileName
     })
   } catch (error: any) {
-    logger.error('[Backup] restoreFromWebdav: Error downloading file from WebDAV:', error)
+    logger.error('[Backup] restoreFromWebdavWithConfig: Error downloading file from WebDAV:', error)
     window.modal.error({
       title: i18n.t('message.restore.failed'),
       content: error.message
@@ -367,13 +528,11 @@ export async function restoreFromWebdav(fileName?: string) {
     return
   }
 
-  // Direct backup format (version 6+) returns undefined - app needs to relaunch
   if (!data) {
     logger.info('[WebDAVBackup] Direct backup restored, app will restart')
     return
   }
 
-  // Legacy backup format (version <= 5) returns JSON string
   try {
     await handleData(JSON.parse(data))
   } catch (error) {
@@ -416,14 +575,14 @@ export async function backupToS3({
   }
   const timestamp = dayjs().format('YYYYMMDDHHmmss')
   const backupFileName = customFileName || `cherry-studio.${timestamp}.${hostname}.${deviceType}.zip`
-  const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
+  const migrationFileName = backupFileName.replace('cherry-studio.', `cherry-studio${MIGRATION_BACKUP_MARKER}`)
+  const finalFileName = migrationFileName.endsWith('.zip') ? migrationFileName : `${migrationFileName}.zip`
 
   try {
-    // Use direct backup method (copy IndexedDB/LocalStorage directories)
-    const success = await window.api.backup.backupToS3({
+    const success = await window.api.backup.backupMigrationToS3({
       ...s3Config,
       fileName: finalFileName
-    })
+    }, await getBackupData())
 
     if (success) {
       store.dispatch(
@@ -1102,6 +1261,83 @@ export async function backupToLocal({
     }
     isManualBackupRunning = false
   }
+}
+
+export async function backupMigrationToLocal({
+  showMessage = false,
+  customFileName = ''
+}: {
+  showMessage?: boolean
+  customFileName?: string
+} = {}) {
+  // Local backup settings expose both quick same-platform snapshots and portable
+  // migration archives. This method is the portable variant used for cross-platform restore.
+  const notificationService = NotificationService.getInstance()
+  if (isManualBackupRunning) {
+    logger.verbose('Manual backup already in progress')
+    return
+  }
+
+  isManualBackupRunning = true
+  store.dispatch(setLocalBackupSyncState({ syncing: true, lastSyncError: null }))
+
+  const {
+    localBackupDir: localBackupDirSetting,
+    localBackupSkipBackupFile
+  } = store.getState().settings
+  const localBackupDir = await window.api.resolvePath(localBackupDirSetting)
+
+  let deviceType = 'unknown'
+  let hostname = 'unknown'
+  try {
+    deviceType = (await window.api.system.getDeviceType()) || 'unknown'
+    hostname = (await window.api.system.getHostname()) || 'unknown'
+  } catch (error) {
+    logger.error('Failed to get device type or hostname:', error as Error)
+  }
+
+  const timestamp = dayjs().format('YYYYMMDDHHmmss')
+  const backupFileName = customFileName || `cherry-studio${MIGRATION_BACKUP_MARKER}${timestamp}.${hostname}.${deviceType}.zip`
+  const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
+
+  try {
+    const result = await window.api.backup.backupMigrationToLocalDir(finalFileName, await getBackupData(), {
+      localBackupDir,
+      skipBackupFile: localBackupSkipBackupFile
+    })
+
+    if (result && showMessage) {
+      notificationService.send({
+        id: uuid(),
+        type: 'success',
+        title: i18n.t('common.success'),
+        message: i18n.t('message.backup.success'),
+        silent: false,
+        timestamp: Date.now(),
+        source: 'backup',
+        channel: 'system'
+      })
+    }
+
+    return result
+  } catch (error: any) {
+    logger.error('[LocalMigrationBackup] Backup failed:', error)
+    store.dispatch(setLocalBackupSyncState({ lastSyncError: error.message || 'Unknown error' }))
+    if (showMessage) {
+      window.modal.error({
+        title: i18n.t('message.backup.failed'),
+        content: error.message || 'Unknown error'
+      })
+    }
+    throw error
+  } finally {
+    store.dispatch(setLocalBackupSyncState({ lastSyncTime: Date.now(), syncing: false }))
+    isManualBackupRunning = false
+  }
+}
+
+export async function restoreMigrationFromLocal(fileName: string) {
+  return restoreFromLocal(fileName)
 }
 
 export async function restoreFromLocal(fileName: string) {

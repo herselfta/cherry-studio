@@ -40,7 +40,6 @@ class BackupManager {
 
   // Cached instance to avoid recreating
   private s3Storage: S3Storage | null = null
-  private webdavInstance: WebDav | null = null
 
   // Cached core connection config, used to detect if connection config has changed
   private cachedS3ConnectionConfig: {
@@ -50,13 +49,6 @@ class BackupManager {
     accessKeyId: string
     secretAccessKey: string
     root?: string
-  } | null = null
-
-  private cachedWebdavConnectionConfig: {
-    webdavHost: string
-    webdavUser?: string
-    webdavPass?: string
-    webdavPath?: string
   } | null = null
 
   /**
@@ -434,6 +426,27 @@ class BackupManager {
   }
 
   /**
+   * Migration backup to local directory.
+   * This intentionally uses the legacy logical export format instead of direct
+   * storage snapshots so the resulting archive remains cross-platform portable.
+   */
+  async backupMigrationToLocalDir(
+    _: Electron.IpcMainInvokeEvent,
+    fileName: string,
+    data: string,
+    localConfig: { localBackupDir?: string; skipBackupFile?: boolean }
+  ) {
+    try {
+      const backupDir = localConfig.localBackupDir || this.backupDir
+      await fs.ensureDir(backupDir)
+      return await this.backupLegacy(_, fileName, data, backupDir, localConfig.skipBackupFile)
+    } catch (error) {
+      logger.error('[backupMigrationToLocalDir] Local migration backup failed:', error as Error)
+      throw error
+    }
+  }
+
+  /**
    * Direct backup to WebDAV
    * Creates a backup and uploads it to a WebDAV server.
    * @param _ - Electron IPC event
@@ -460,6 +473,56 @@ class BackupManager {
       return result
     } catch (error) {
       await fs.remove(backupedFilePath).catch(() => {})
+      throw error
+    }
+  }
+
+  /**
+   * Migration backup to WebDAV.
+   * Keep remote backups portable by uploading the logical export format instead of
+   * direct Chromium storage snapshots, which are not safe for cross-platform restore.
+   */
+  async backupMigrationToWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig, data: string) {
+    const filename = webdavConfig.fileName || 'cherry-studio.migration.zip'
+    const backupedFilePath = await this.backupLegacy(_, filename, data, undefined, webdavConfig.skipBackupFile)
+    const webdavClient = this.getWebDavInstance(webdavConfig)
+    try {
+      let result
+      if (webdavConfig.disableStream) {
+        const fileContent = await fs.readFile(backupedFilePath)
+        result = await webdavClient.putFileContents(filename, fileContent, { overwrite: true })
+      } else {
+        const contentLength = (await fs.stat(backupedFilePath)).size
+        result = await webdavClient.putFileContents(filename, fs.createReadStream(backupedFilePath), {
+          overwrite: true,
+          contentLength
+        })
+      }
+      await fs.remove(backupedFilePath)
+      return result
+    } catch (error) {
+      await fs.remove(backupedFilePath).catch(() => {})
+      throw error
+    }
+  }
+
+  /**
+   * Upload a plain-text artifact to WebDAV.
+   * Cross-device mobile sync stores a JSON payload instead of a migration ZIP so
+   * both desktop and mobile can exchange only the shared data subset via cloud sync.
+   */
+  async uploadTextToWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig, data: string) {
+    const filename = webdavConfig.fileName || 'cherry-studio.mobile-sync.json'
+    const webdavClient = this.getWebDavInstance(webdavConfig)
+    const buffer = Buffer.from(data, 'utf8')
+
+    try {
+      return await webdavClient.putFileContents(filename, buffer, {
+        overwrite: true,
+        contentLength: buffer.byteLength
+      })
+    } catch (error) {
+      logger.error('[uploadTextToWebdav] WebDAV text upload failed:', error as Error)
       throw error
     }
   }
@@ -493,6 +556,36 @@ class BackupManager {
     } catch (error) {
       logger.error('[backupToS3] S3 backup failed:', error as Error)
       await fs.remove(backupedFilePath)
+      throw error
+    }
+  }
+
+  /**
+   * Migration backup to S3.
+   * Remote restore must stay cross-platform, so S3 uploads use the portable legacy export.
+   */
+  async backupMigrationToS3(_: Electron.IpcMainInvokeEvent, s3Config: S3Config, data: string) {
+    const os = require('os')
+    const deviceName = os.hostname ? os.hostname() : 'device'
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[-:T.Z]/g, '')
+      .slice(0, 14)
+    const filename = s3Config.fileName || `cherry-studio.migration.${deviceName}.${timestamp}.zip`
+
+    logger.debug(`[backupMigrationToS3] Starting S3 migration backup to ${filename}`)
+
+    const backupedFilePath = await this.backupLegacy(_, filename, data, undefined, s3Config.skipBackupFile)
+    const s3Client = this.getS3Storage(s3Config)
+    try {
+      const fileBuffer = await fs.promises.readFile(backupedFilePath)
+      const result = await s3Client.putFileContents(filename, fileBuffer)
+      await fs.remove(backupedFilePath)
+      logger.info(`S3 migration backup completed: ${filename}`)
+      return result
+    } catch (error) {
+      logger.error('[backupMigrationToS3] S3 migration backup failed:', error as Error)
+      await fs.remove(backupedFilePath).catch(() => {})
       throw error
     }
   }
@@ -565,10 +658,14 @@ class BackupManager {
         throw new Error('This backup file is not from Cherry Studio and cannot be restored')
       }
 
-      // Warn about cross-platform restore
+      // Direct backups are physical Chromium/Electron storage snapshots
+      // (IndexedDB / Local Storage / Data directory), not a portable logical export.
+      // They are suitable for same-platform recovery only. Allowing cross-platform
+      // restore here can leave the app in a partially restored state where topics
+      // exist but message content cannot be read back correctly.
       if (metadata.platform && metadata.platform !== process.platform) {
-        logger.warn(
-          `[restoreDirect] Cross-platform restore: backup from ${metadata.platform}, current is ${process.platform}`
+        throw new Error(
+          `Cross-platform direct restore is not supported. Backup platform: ${metadata.platform}, current platform: ${process.platform}`
         )
       }
 
@@ -764,6 +861,28 @@ class BackupManager {
   }
 
   /**
+   * Download a plain-text artifact from WebDAV.
+   * Keep this separate from restoreFromWebdav so mobile sync imports do not get
+   * routed through the ZIP restore pipeline again during future upstream changes.
+   */
+  async downloadTextFromWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig) {
+    const filename = webdavConfig.fileName || 'cherry-studio.mobile-sync.json'
+    const webdavClient = this.getWebDavInstance(webdavConfig)
+
+    try {
+      const retrievedFile = await webdavClient.getFileContents(filename)
+      if (typeof retrievedFile === 'string') {
+        return retrievedFile
+      }
+
+      return Buffer.from(retrievedFile as Buffer).toString('utf8')
+    } catch (error: any) {
+      logger.error('[downloadTextFromWebdav] Failed to download WebDAV text file:', error)
+      throw new Error(error.message || 'Failed to download WebDAV text file')
+    }
+  }
+
+  /**
    * Restore from an S3 backup
    * Downloads the backup file from S3 storage and restores it.
    * @param _ - Electron IPC event
@@ -851,50 +970,9 @@ class BackupManager {
     await fs.ensureDir(dataRestorePath)
   }
 
-  /**
-   * Deep compare two WebDAV config objects for equality
-   * Only compares core fields that affect client connection, ignores volatile fields like fileName
-   * @param cachedConfig - The cached WebDAV configuration
-   * @param config - The new WebDAV configuration to compare
-   * @returns True if the configs are equal (connection-related fields only)
-   */
-  private isWebDavConfigEqual(cachedConfig: typeof this.cachedWebdavConnectionConfig, config: WebDavConfig): boolean {
-    if (!cachedConfig) return false
-
-    return (
-      cachedConfig.webdavHost === config.webdavHost &&
-      cachedConfig.webdavUser === config.webdavUser &&
-      cachedConfig.webdavPass === config.webdavPass &&
-      cachedConfig.webdavPath === config.webdavPath
-    )
-  }
-
-  /**
-   * Get WebDav instance, reuses existing instance if connection config hasn't changed
-   * Note: Only connection-related config changes will recreate the instance
-   * Other config changes don't affect instance reuse
-   * @param config - WebDAV configuration
-   * @returns WebDav instance
-   */
   private getWebDavInstance(config: WebDavConfig): WebDav {
-    // Check if core connection config has changed
-    const configChanged = !this.isWebDavConfigEqual(this.cachedWebdavConnectionConfig, config)
-
-    if (configChanged || !this.webdavInstance) {
-      this.webdavInstance = new WebDav(config)
-      // Only cache connection-related config fields
-      this.cachedWebdavConnectionConfig = {
-        webdavHost: config.webdavHost,
-        webdavUser: config.webdavUser,
-        webdavPass: config.webdavPass,
-        webdavPath: config.webdavPath
-      }
-      logger.debug('[BackupManager] Created new WebDav instance')
-    } else {
-      logger.debug('[BackupManager] Reusing existing WebDav instance')
-    }
-
-    return this.webdavInstance
+    logger.debug('[BackupManager] Creating fresh WebDav instance')
+    return new WebDav(config)
   }
 
   // ==================== WebDAV Methods ====================
@@ -911,8 +989,11 @@ class BackupManager {
       const client = this.getWebDavInstance(config)
       const files = await client.getDirectoryContents()
 
+      // WebDAV now hosts more than one artifact family: migration backups (.zip)
+      // and cross-device mobile sync payloads (.json). Callers must filter by
+      // file type instead of assuming the listing only contains ZIP archives.
       return files
-        .filter((file: FileStat) => file.type === 'file' && file.basename.endsWith('.zip'))
+        .filter((file: FileStat) => file.type === 'file')
         .map((file: FileStat) => ({
           fileName: file.basename,
           modifiedTime: file.lastmod,
@@ -1055,7 +1136,10 @@ class BackupManager {
         const filePath = path.join(localBackupDir, file)
         const stat = await fs.stat(filePath)
 
-        if (stat.isFile() && file.endsWith('.zip')) {
+        // Local backup directories can now contain both desktop migration ZIPs and
+        // APP sync JSON payloads. Keep the listing generic and let renderer callers
+        // filter by artifact type so backup/restore flows can share the same picker.
+        if (stat.isFile()) {
           result.push({
             fileName: file,
             modifiedTime: stat.mtime.toISOString(),

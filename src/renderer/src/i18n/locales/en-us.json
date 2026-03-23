@@ -3818,6 +3818,14 @@
         },
         "title": "Export to phone"
       },
+      "artifact_type": {
+        "app": "APP",
+        "backup_title": "Choose Backup Type",
+        "cross_device_help": "PC creates the full desktop migration package, while APP creates the phone sync package that only merges shared data.",
+        "cross_device_title": "Cross-device Data",
+        "pc": "PC",
+        "restore_title": "Choose Restore Type"
+      },
       "hour_interval_one": "{{count}} hour",
       "hour_interval_other": "{{count}} hours",
       "import_settings": {
@@ -4268,6 +4276,7 @@
                 "delete": "Please select backup files to delete"
               }
             },
+            "empty": "No files found",
             "title": "Backup Data Management"
           },
           "modal": {
@@ -4275,6 +4284,25 @@
               "placeholder": "Please enter backup filename"
             },
             "title": "Backup to WebDAV"
+          }
+        },
+        "mobile_sync": {
+          "help": "Sync only the shared desktop/mobile data subset over WebDAV without overwriting desktop-only state.",
+          "manager": {
+            "empty": "No mobile sync files found",
+            "title": "Mobile Sync Files"
+          },
+          "restore": {
+            "button": "Sync from WebDAV",
+            "confirm": {
+              "content": "Import the mobile sync payload from WebDAV and merge it into current data?",
+              "title": "Confirm Sync"
+            },
+            "success": "Sync successful, the application will refresh shortly"
+          },
+          "upload": {
+            "button": "Sync to WebDAV",
+            "success": "Synced {{fileName}} to WebDAV"
           }
         },
         "disableStream": {

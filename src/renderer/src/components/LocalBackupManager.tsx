@@ -1,7 +1,7 @@
 import { DeleteOutlined, ExclamationCircleOutlined, ReloadOutlined } from '@ant-design/icons'
 import { LEGACY_INTERNAL_BACKUP_FILE_NAME, restoreFromLocal } from '@renderer/services/BackupService'
 import { formatFileSize } from '@renderer/utils'
-import { Button, message, Modal, Space, Table, Tooltip } from 'antd'
+import { Button, message, Modal, Segmented, Space, Table, Tooltip } from 'antd'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -16,10 +16,25 @@ interface LocalBackupManagerProps {
   visible: boolean
   onClose: () => void
   localBackupDir?: string
-  restoreMethod?: (fileName: string) => Promise<void>
+  restoreMethod?: (fileName: string) => Promise<unknown>
+  fileFilter?: (fileName: string) => boolean
+  artifactType?: 'pc' | 'app'
+  onArtifactTypeChange?: (value: 'pc' | 'app') => void
+  customLabels?: {
+    title?: string
+  }
 }
 
-export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMethod }: LocalBackupManagerProps) {
+export function LocalBackupManager({
+  visible,
+  onClose,
+  localBackupDir,
+  restoreMethod,
+  fileFilter,
+  artifactType,
+  onArtifactTypeChange,
+  customLabels
+}: LocalBackupManagerProps) {
   const { t } = useTranslation()
   const [backupFiles, setBackupFiles] = useState<BackupFile[]>([])
   const [loading, setLoading] = useState(false)
@@ -39,7 +54,9 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
     setLoading(true)
     try {
       const files = await window.api.backup.listLocalBackupFiles(localBackupDir)
-      const visibleFiles = files.filter((file) => file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME)
+      const visibleFiles = files.filter(
+        (file) => file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME && (fileFilter ? fileFilter(file.fileName) : true)
+      )
       setBackupFiles(visibleFiles)
       setPagination((prev) => ({
         ...prev,
@@ -50,7 +67,7 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
     } finally {
       setLoading(false)
     }
-  }, [localBackupDir, t])
+  }, [fileFilter, localBackupDir, t])
 
   useEffect(() => {
     if (visible) {
@@ -243,13 +260,25 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
 
   return (
     <Modal
-      title={t('settings.data.local.backup.manager.title')}
+      title={customLabels?.title || t('settings.data.local.backup.manager.title')}
       open={visible}
       onCancel={onClose}
       width={800}
       centered
       transitionName="animation-move-down"
       footer={footerContent}>
+      {onArtifactTypeChange && artifactType && (
+        <Segmented
+          block
+          style={{ marginBottom: 16 }}
+          value={artifactType}
+          onChange={(value) => onArtifactTypeChange(value as 'pc' | 'app')}
+          options={[
+            { label: t('settings.data.artifact_type.pc'), value: 'pc' },
+            { label: t('settings.data.artifact_type.app'), value: 'app' }
+          ]}
+        />
+      )}
       <Table
         rowKey="fileName"
         columns={columns}

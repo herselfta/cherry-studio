@@ -1,7 +1,11 @@
 import { DeleteOutlined, ExclamationCircleOutlined, ReloadOutlined } from '@ant-design/icons'
-import { LEGACY_INTERNAL_BACKUP_FILE_NAME, restoreFromWebdav } from '@renderer/services/BackupService'
+import {
+  isMigrationBackupFile,
+  LEGACY_INTERNAL_BACKUP_FILE_NAME,
+  restoreFromWebdav
+} from '@renderer/services/BackupService'
 import { formatFileSize } from '@renderer/utils'
-import { Button, message, Modal, Table, Tooltip } from 'antd'
+import { Button, message, Modal, Segmented, Table, Tooltip } from 'antd'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -30,10 +34,16 @@ interface WebdavBackupManagerProps {
     webdavDisableStream?: boolean
   }
   restoreMethod?: (fileName: string) => Promise<void>
+  fileFilter?: (file: BackupFile) => boolean
+  artifactType?: 'pc' | 'app'
+  onArtifactTypeChange?: (value: 'pc' | 'app') => void
   customLabels?: {
     restoreConfirmTitle?: string
     restoreConfirmContent?: string
     invalidConfigMessage?: string
+    managerTitle?: string
+    managerEmptyText?: string
+    restoreSuccessMessage?: string
   }
 }
 
@@ -42,6 +52,9 @@ export function WebdavBackupManager({
   onClose,
   webdavConfig,
   restoreMethod,
+  fileFilter,
+  artifactType,
+  onArtifactTypeChange,
   customLabels
 }: WebdavBackupManagerProps) {
   const { t } = useTranslation()
@@ -72,7 +85,10 @@ export function WebdavBackupManager({
         webdavPass,
         webdavPath
       } as WebdavConfig)
-      const visibleFiles = files.filter((file) => file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME)
+      const visibleFiles = (fileFilter
+        ? files.filter((file) => fileFilter(file))
+        : files.filter((file) => file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME && isMigrationBackupFile(file.fileName))
+      ).sort((left, right) => new Date(right.modifiedTime).getTime() - new Date(left.modifiedTime).getTime())
       setBackupFiles(visibleFiles)
       setPagination((prev) => ({
         ...prev,
@@ -83,7 +99,7 @@ export function WebdavBackupManager({
     } finally {
       setLoading(false)
     }
-  }, [webdavHost, webdavUser, webdavPass, webdavPath, t])
+  }, [fileFilter, t, webdavHost, webdavPass, webdavPath, webdavUser])
 
   useEffect(() => {
     if (visible) {
@@ -198,7 +214,7 @@ export function WebdavBackupManager({
         setRestoring(true)
         try {
           await (restoreMethod || restoreFromWebdav)(fileName)
-          window.toast.success(t('settings.data.webdav.backup.manager.restore.success'))
+          window.toast.success(customLabels?.restoreSuccessMessage || t('settings.data.webdav.backup.manager.restore.success'))
           onClose() // 关闭模态框
         } catch (error: any) {
           window.toast.error(`${t('settings.data.webdav.backup.manager.restore.error')}: ${error.message}`)
@@ -267,7 +283,7 @@ export function WebdavBackupManager({
 
   return (
     <Modal
-      title={t('settings.data.webdav.backup.manager.title')}
+      title={customLabels?.managerTitle || t('settings.data.webdav.backup.manager.title')}
       open={visible}
       onCancel={onClose}
       width={800}
@@ -290,6 +306,18 @@ export function WebdavBackupManager({
           {t('common.close')}
         </Button>
       ]}>
+      {onArtifactTypeChange && artifactType && (
+        <Segmented
+          block
+          style={{ marginBottom: 16 }}
+          value={artifactType}
+          onChange={(value) => onArtifactTypeChange(value as 'pc' | 'app')}
+          options={[
+            { label: t('settings.data.artifact_type.pc'), value: 'pc' },
+            { label: t('settings.data.artifact_type.app'), value: 'app' }
+          ]}
+        />
+      )}
       <Table
         rowKey="fileName"
         columns={columns}
@@ -299,6 +327,9 @@ export function WebdavBackupManager({
         loading={loading}
         onChange={handleTableChange}
         size="middle"
+        locale={{
+          emptyText: customLabels?.managerEmptyText || t('settings.data.webdav.backup.manager.empty')
+        }}
       />
     </Modal>
   )

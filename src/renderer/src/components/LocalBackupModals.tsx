@@ -12,6 +12,10 @@ interface LocalBackupModalProps {
   backuping: boolean
   customFileName: string
   setCustomFileName: (value: string) => void
+  customLabels?: {
+    title?: string
+    filenamePlaceholder?: string
+  }
 }
 
 const logger = loggerService.withContext('LocalBackupModal')
@@ -22,13 +26,14 @@ export function LocalBackupModal({
   handleCancel,
   backuping,
   customFileName,
-  setCustomFileName
+  setCustomFileName,
+  customLabels
 }: LocalBackupModalProps) {
   const { t } = useTranslation()
 
   return (
     <Modal
-      title={t('settings.data.local.backup.modal.title')}
+      title={customLabels?.title || t('settings.data.local.backup.modal.title')}
       open={isModalVisible}
       onOk={handleBackup}
       onCancel={handleCancel}
@@ -43,14 +48,23 @@ export function LocalBackupModal({
       <Input
         value={customFileName}
         onChange={(e) => setCustomFileName(e.target.value)}
-        placeholder={t('settings.data.local.backup.modal.filename.placeholder')}
+        placeholder={customLabels?.filenamePlaceholder || t('settings.data.local.backup.modal.filename.placeholder')}
       />
     </Modal>
   )
 }
 
 // Hook for backup modal
-export function useLocalBackupModal(localBackupDir: string | undefined) {
+export function useLocalBackupModal(
+  localBackupDir: string | undefined,
+  {
+    backupMethod = backupToLocal,
+    defaultFileNameBuilder
+  }: {
+    backupMethod?: typeof backupToLocal
+    defaultFileNameBuilder?: (args: { timestamp: string; hostname: string; deviceType: string }) => string
+  } = {}
+) {
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [backuping, setBackuping] = useState(false)
   const [customFileName, setCustomFileName] = useState('')
@@ -60,14 +74,15 @@ export function useLocalBackupModal(localBackupDir: string | undefined) {
   }
 
   const showBackupModal = useCallback(async () => {
-    // 获取默认文件名
     const deviceType = await window.api.system.getDeviceType()
     const hostname = await window.api.system.getHostname()
     const timestamp = dayjs().format('YYYYMMDDHHmmss')
-    const defaultFileName = `cherry-studio.${timestamp}.${hostname}.${deviceType}.zip`
+    const defaultFileName =
+      defaultFileNameBuilder?.({ timestamp, hostname, deviceType }) ||
+      `cherry-studio.${timestamp}.${hostname}.${deviceType}.zip`
     setCustomFileName(defaultFileName)
     setIsModalVisible(true)
-  }, [])
+  }, [defaultFileNameBuilder])
 
   const handleBackup = async () => {
     if (!localBackupDir) {
@@ -77,7 +92,7 @@ export function useLocalBackupModal(localBackupDir: string | undefined) {
 
     setBackuping(true)
     try {
-      await backupToLocal({
+      await backupMethod({
         showMessage: true,
         customFileName: customFileName || undefined
       })

@@ -4,6 +4,7 @@ import https from 'https'
 import path from 'path'
 import type Stream from 'stream'
 import type {
+  AuthType,
   BufferLike,
   CreateDirectoryOptions,
   GetFileContentsOptions,
@@ -22,6 +23,12 @@ export default class WebDav {
     this.webdavPath = params.webdavPath || '/'
 
     this.instance = createClient(params.webdavHost, {
+      // Some Apache/WebDAV services only work reliably when the client is pinned to
+      // password/basic auth. We verified this with InfiniCLOUD: the same credentials
+      // succeed with a raw PROPFIND + Basic Authorization header, but the library's
+      // default/auto auth path can still return 401 in-app. Do not switch this back
+      // to auto unless those servers are re-verified end-to-end.
+      authType: 'password' as AuthType,
       username: params.webdavUser,
       password: params.webdavPass,
       maxBodyLength: Infinity,
