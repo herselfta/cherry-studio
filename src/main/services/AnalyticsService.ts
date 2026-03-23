@@ -1,8 +1,6 @@
 import type { TokenUsageData } from '@cherrystudio/analytics-client'
 import { AnalyticsClient } from '@cherrystudio/analytics-client'
 import { loggerService } from '@logger'
-import { generateUserAgent } from '@main/utils/systemInfo'
-import { APP_NAME } from '@shared/config/constant'
 import { app } from 'electron'
 
 import { configManager } from './ConfigManager'
@@ -24,17 +22,10 @@ class AnalyticsService {
     this.client = new AnalyticsClient({
       clientId: configManager.getClientId(),
       channel: 'cherry-studio',
-      onError: (error) => logger.error('Analytics error:', error),
-      headers: {
-        'User-Agent': generateUserAgent(),
-        'Client-Id': configManager.getClientId(),
-        'App-Name': APP_NAME,
-        'App-Version': `v${app.getVersion()}`,
-        OS: process.platform
-      }
+      onError: (error) => logger.error('Analytics error:', error)
     })
 
-    this.client.trackAppLaunch({
+    this.client.track('app_launch', {
       version: app.getVersion(),
       os: process.platform
     })
@@ -57,7 +48,10 @@ class AnalyticsService {
       return
     }
 
-    await this.client.trackAppUpdate()
+    await this.client.sendImmediate('app_update', {
+      version: app.getVersion(),
+      os: process.platform
+    })
   }
 
   public async destroy(): Promise<void> {
