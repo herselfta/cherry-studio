@@ -6,9 +6,9 @@ import { TopView } from '@renderer/components/TopView'
 import { DynamicVirtualList, type DynamicVirtualListRef } from '@renderer/components/VirtualList'
 import { getModelLogo } from '@renderer/config/models'
 import { usePinnedModels } from '@renderer/hooks/usePinnedModels'
-import { useProviders } from '@renderer/hooks/useProvider'
 import { getModelUniqId } from '@renderer/services/ModelService'
-import type { Model, ModelType, Provider } from '@renderer/types'
+import { getProviderById } from '@renderer/services/ProviderService'
+import type { Model, Provider } from '@renderer/types'
 import { objectEntries } from '@renderer/types'
 import { classNames, filterModelsByKeywords, getFancyProviderName } from '@renderer/utils'
 import { getModelTags } from '@renderer/utils/model'
@@ -37,43 +37,42 @@ import type { FlatListItem, FlatListModel } from './types'
 const PAGE_SIZE = 12
 const ITEM_HEIGHT = 36
 
-interface PopupParams {
+export interface SelectModelPopupParams {
+  providers: Provider[]
   model?: Model
-  /** Basic model filter */
-  filter?: (model: Model) => boolean
+  loading?: boolean
   /** Show tag filter section */
   showTagFilter?: boolean
   /** Show provider filter section */
   showProviderFilter?: boolean
+  showPinnedModels?: boolean
+  prioritizedProviderIds?: string[]
 }
 
-interface Props extends PopupParams {
+interface Props extends SelectModelPopupParams {
   resolve: (value: Model | undefined) => void
 }
 
-export type FilterType = Exclude<ModelType, 'text'> | 'free'
-
-// const logger = loggerService.withContext('SelectModelPopup')
-
-const PopupContainer: React.FC<Props> = ({
+const SelectModelPopupView: React.FC<Props> = ({
+  providers,
   model,
-  filter: baseFilter,
+  loading = false,
   showTagFilter = true,
   showProviderFilter = true,
+  showPinnedModels = true,
+  prioritizedProviderIds = [],
   resolve
 }) => {
   const { t } = useTranslation()
-  const { providers } = useProviders()
-  const { pinnedModels, togglePinnedModel, loading } = usePinnedModels()
+  const { pinnedModels, togglePinnedModel, loading: pinnedLoading } = usePinnedModels()
+  const isLoading = loading || (showPinnedModels && pinnedLoading)
   const [open, setOpen] = useState(true)
   const listRef = useRef<DynamicVirtualListRef>(null)
   const [_searchText, setSearchText] = useState('')
   const searchText = useDeferredValue(_searchText)
 
-  // 当前选中的模型ID
   const currentModelId = model ? getModelUniqId(model) : ''
 
-  // 管理滚动和焦点状态
   const [focusedItemKey, _setFocusedItemKey] = useState('')
   const [isMouseOver, setIsMouseOver] = useState(false)
   const preventScrollToIndex = useRef(false)
@@ -87,16 +86,27 @@ const PopupContainer: React.FC<Props> = ({
   const { tagSelection, selectedTags, tagFilter, toggleTag } = useModelTagFilter()
   const { selectedProviderIds, providerFilter, toggleProvider, resetProviders } = useModelProviderFilter()
 
-  const modelSearchFilter = useCallback(
-    (candidate: Model) => {
-      return baseFilter === undefined || baseFilter(candidate)
-    },
-    [baseFilter]
-  )
+  const sortedProviders = useMemo(() => {
+    if (prioritizedProviderIds.length === 0) {
+      return providers
+    }
+
+    const priorityMap = new Map(prioritizedProviderIds.map((id, index) => [id, index]))
+
+    return [...providers].sort((a, b) => {
+      const aPriority = priorityMap.get(a.id)
+      const bPriority = priorityMap.get(b.id)
+
+      if (aPriority === undefined && bPriority === undefined) return 0
+      if (aPriority === undefined) return 1
+      if (bPriority === undefined) return -1
+      return aPriority - bPriority
+    })
+  }, [providers, prioritizedProviderIds])
 
   const searchFilter = useCallback(
     (provider: Provider) => {
-      let models = provider.models.filter(modelSearchFilter)
+      let models = provider.models
 
       if (searchText.trim()) {
         models = filterModelsByKeywords(searchText, models, provider)
@@ -104,15 +114,14 @@ const PopupContainer: React.FC<Props> = ({
 
       return sortBy(models, ['group', 'name'])
     },
-    [searchText, modelSearchFilter]
+    [searchText]
   )
 
   const providerModelGroups = useMemo(
-    () => providers.map((provider) => ({ provider, models: searchFilter(provider) })),
-    [providers, searchFilter]
+    () => sortedProviders.map((provider) => ({ provider, models: searchFilter(provider) })),
+    [sortedProviders, searchFilter]
   )
 
-  // 计算要显示的可用标签列表
   const availableTags = useMemo(() => {
     const models = providerModelGroups
       .filter(({ provider }) => !showProviderFilter || providerFilter(provider.id))
@@ -132,21 +141,20 @@ const PopupContainer: React.FC<Props> = ({
     const counts = new Map<string, number>()
 
     providerModelGroups.forEach(({ provider, models }) => {
-      const count = models.filter((model) => !showTagFilter || tagFilter(model)).length
+      const count = models.filter((candidate) => !showTagFilter || tagFilter(candidate)).length
       if (count > 0 || selectedProviderIds.includes(provider.id)) {
         counts.set(provider.id, count)
       }
     })
 
-    return providers
+    return sortedProviders
       .filter((provider) => counts.has(provider.id))
       .map((provider) => ({
         provider,
         count: counts.get(provider.id) ?? 0
       }))
-  }, [providerModelGroups, providers, selectedProviderIds, showTagFilter, tagFilter])
+  }, [providerModelGroups, selectedProviderIds, showTagFilter, sortedProviders, tagFilter])
 
-  // 创建模型列表项
   const createModelItem = useCallback(
     (model: Model, provider: Provider, isPinned: boolean): FlatListModel => {
       const modelId = getModelUniqId(model)
@@ -160,7 +168,7 @@ const PopupContainer: React.FC<Props> = ({
           <ModelName>
             <HStack alignItems="center">
               {model.name}
-              {isPinned && <span style={{ color: 'var(--color-text-3)' }}> | {groupName}</span>}
+              {isPinned && <span style={{ color: 'var(--color-text-3)', whiteSpace: 'pre-wrap' }}> | {groupName}</span>}
             </HStack>
             {isCherryAi && <FreeTrialModelTag model={model} showLabel={false} />}
           </ModelName>
@@ -183,27 +191,24 @@ const PopupContainer: React.FC<Props> = ({
     [currentModelId]
   )
 
-  // 构建扁平化列表数据，并派生出可选择的模型项
   const { listItems, modelItems } = useMemo(() => {
     const items: FlatListItem[] = []
     const pinnedModelIds = new Set(pinnedModels)
     const finalModelFilter = (providerId: string, model: Model) => {
-      const _tagFilter = !showTagFilter || tagFilter(model)
-      const _providerFilter = !showProviderFilter || providerFilter(providerId)
-      return _tagFilter && _providerFilter
+      const matchesTag = !showTagFilter || tagFilter(model)
+      const matchesProvider = !showProviderFilter || providerFilter(providerId)
+      return matchesTag && matchesProvider
     }
 
-    // 添加置顶模型分组（仅在无搜索文本时）
-    if (searchText.length === 0 && pinnedModelIds.size > 0) {
+    if (searchText.length === 0 && showPinnedModels && pinnedModelIds.size > 0) {
       const pinnedItems = providerModelGroups.flatMap(({ provider, models }) =>
         models
-          .filter((m) => pinnedModelIds.has(getModelUniqId(m)))
-          .filter((m) => finalModelFilter(provider.id, m))
-          .map((m) => createModelItem(m, provider, true))
+          .filter((item) => pinnedModelIds.has(getModelUniqId(item)))
+          .filter((item) => finalModelFilter(provider.id, item))
+          .map((item) => createModelItem(item, provider, true))
       )
 
       if (pinnedItems.length > 0) {
-        // 添加置顶分组标题
         items.push({
           key: 'pinned-group',
           type: 'group',
@@ -215,20 +220,20 @@ const PopupContainer: React.FC<Props> = ({
       }
     }
 
-    // 添加常规模型分组
     providerModelGroups.forEach(({ provider, models }) => {
       const filteredModels = models
-        .filter((m) => searchText.length > 0 || !pinnedModelIds.has(getModelUniqId(m)))
-        .filter((m) => finalModelFilter(provider.id, m))
+        .filter((item) => searchText.length > 0 || !pinnedModelIds.has(getModelUniqId(item)))
+        .filter((item) => finalModelFilter(provider.id, item))
 
       if (filteredModels.length === 0) return
 
-      // 添加 provider 分组标题
+      const canNavigateToSettings = provider.id !== 'cherryai' && !!getProviderById(provider.id)
+
       items.push({
         key: `provider-${provider.id}`,
         type: 'group',
         name: getFancyProviderName(provider),
-        actions: provider.id !== 'cherryai' && (
+        actions: canNavigateToSettings && (
           <Tooltip title={t('navigate.provider_settings')} mouseEnterDelay={0.5} mouseLeaveDelay={0}>
             <Settings2
               size={12}
@@ -246,23 +251,27 @@ const PopupContainer: React.FC<Props> = ({
         isSelected: false
       })
 
-      items.push(...filteredModels.map((m) => createModelItem(m, provider, pinnedModelIds.has(getModelUniqId(m)))))
+      items.push(
+        ...filteredModels.map((item) =>
+          createModelItem(item, provider, showPinnedModels && pinnedModelIds.has(getModelUniqId(item)))
+        )
+      )
     })
 
-    // 获取可选择的模型项（过滤掉分组标题）
-    const modelItems = items.filter((item) => item.type === 'model')
-    return { listItems: items, modelItems }
+    const selectableModels = items.filter((item) => item.type === 'model')
+    return { listItems: items, modelItems: selectableModels }
   }, [
-    pinnedModels,
-    searchText.length,
-    providerModelGroups,
-    showTagFilter,
-    showProviderFilter,
-    tagFilter,
-    providerFilter,
     createModelItem,
+    pinnedModels,
+    providerFilter,
+    providerModelGroups,
+    resolve,
+    searchText.length,
+    showPinnedModels,
+    showProviderFilter,
+    showTagFilter,
     t,
-    resolve
+    tagFilter
   ])
 
   const shouldShowProviderFilter =
@@ -273,9 +282,8 @@ const PopupContainer: React.FC<Props> = ({
     return Math.min(PAGE_SIZE, listItems.length) * ITEM_HEIGHT
   }, [listItems.length])
 
-  // 处理程序化滚动（加载、搜索开始、搜索清空、tag 筛选）
   useLayoutEffect(() => {
-    if (loading) return
+    if (isLoading) return
 
     if (preventScrollToIndex.current) {
       preventScrollToIndex.current = false
@@ -284,12 +292,9 @@ const PopupContainer: React.FC<Props> = ({
 
     let targetItemKey: string | undefined
 
-    // 启动搜索或任意筛选时，滚动到第一个 item
     if (searchText || selectedTags.length > 0 || selectedProviderIds.length > 0) {
       targetItemKey = modelItems[0]?.key
-    }
-    // 初始加载或清空搜索时，滚动到 selected item
-    else {
+    } else {
       targetItemKey = modelItems.find((item) => item.isSelected)?.key
     }
 
@@ -297,8 +302,6 @@ const PopupContainer: React.FC<Props> = ({
       setFocusedItemKey(targetItemKey)
       const index = listItems.findIndex((item) => item.key === targetItemKey)
       if (index >= 0) {
-        // FIXME: 手动计算偏移量，给 scroller 增加了 scrollPaddingStart 之后，
-        // scrollToIndex 不能准确滚动到 item 中心，但是又需要 padding 来改善体验。
         const targetScrollTop = index * ITEM_HEIGHT - listHeight / 2
         listRef.current?.scrollToOffset(targetScrollTop, {
           align: 'start',
@@ -306,16 +309,7 @@ const PopupContainer: React.FC<Props> = ({
         })
       }
     }
-  }, [
-    searchText,
-    listItems,
-    modelItems,
-    loading,
-    setFocusedItemKey,
-    listHeight,
-    selectedTags.length,
-    selectedProviderIds
-  ])
+  }, [isLoading, listHeight, listItems, modelItems, searchText, selectedProviderIds.length, selectedTags.length, setFocusedItemKey])
 
   const handleItemClick = useCallback(
     (item: FlatListItem) => {
@@ -327,42 +321,35 @@ const PopupContainer: React.FC<Props> = ({
     [resolve]
   )
 
-  // 处理键盘导航
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       const modelCount = modelItems.length
 
       if (!open || modelCount === 0 || e.isComposing) return
 
-      // 键盘操作时禁用鼠标 hover
       if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Enter', 'Escape'].includes(e.key)) {
         e.preventDefault()
         e.stopPropagation()
         setIsMouseOver(false)
       }
 
-      // 当前聚焦的模型 index
       const currentIndex = modelItems.findIndex((item) => item.key === focusedItemKey)
 
       let nextIndex = -1
 
       switch (e.key) {
-        case 'ArrowUp': {
+        case 'ArrowUp':
           nextIndex = (currentIndex < 0 ? 0 : currentIndex - 1 + modelCount) % modelCount
           break
-        }
-        case 'ArrowDown': {
+        case 'ArrowDown':
           nextIndex = (currentIndex < 0 ? 0 : currentIndex + 1) % modelCount
           break
-        }
-        case 'PageUp': {
+        case 'PageUp':
           nextIndex = Math.max(0, (currentIndex < 0 ? 0 : currentIndex) - PAGE_SIZE)
           break
-        }
-        case 'PageDown': {
+        case 'PageDown':
           nextIndex = Math.min(modelCount - 1, (currentIndex < 0 ? 0 : currentIndex) + PAGE_SIZE)
           break
-        }
         case 'Enter':
           if (currentIndex >= 0) {
             const selectedItem = modelItems[currentIndex]
@@ -379,7 +366,6 @@ const PopupContainer: React.FC<Props> = ({
           break
       }
 
-      // 没有键盘导航，直接返回
       if (nextIndex < 0) return
 
       const nextKey = modelItems[nextIndex]?.key || ''
@@ -391,7 +377,7 @@ const PopupContainer: React.FC<Props> = ({
         }
       }
     },
-    [modelItems, open, focusedItemKey, resolve, handleItemClick, setFocusedItemKey, listItems]
+    [focusedItemKey, handleItemClick, listItems, modelItems, open, resolve, setFocusedItemKey]
   )
 
   useEffect(() => {
@@ -444,21 +430,21 @@ const PopupContainer: React.FC<Props> = ({
             {item.name}
             {item.tags}
           </ModelItemLeft>
-          <PinIconWrapper
-            onClick={(e) => {
-              e.stopPropagation()
-              if (item.model) {
+          {showPinnedModels && (
+            <PinIconWrapper
+              onClick={(e) => {
+                e.stopPropagation()
                 togglePin(getModelUniqId(item.model))
-              }
-            }}
-            data-pinned={item.isPinned}
-            $isPinned={item.isPinned}>
-            <PushpinOutlined />
-          </PinIconWrapper>
+              }}
+              data-pinned={item.isPinned}
+              $isPinned={item.isPinned}>
+              <PushpinOutlined />
+            </PinIconWrapper>
+          )}
         </ModelItem>
       )
     },
-    [focusedItemKey, handleItemClick, setFocusedItemKey, togglePin]
+    [focusedItemKey, handleItemClick, setFocusedItemKey, showPinnedModels, togglePin]
   )
 
   return (
@@ -483,7 +469,6 @@ const PopupContainer: React.FC<Props> = ({
       }}
       closeIcon={null}
       footer={null}>
-      {/* 搜索框 */}
       <SelectModelSearchBar onSearch={setSearchText} />
       <Divider style={{ margin: 0, marginTop: 4, borderBlockStartWidth: 0.5 }} />
       {shouldShowProviderFilter && (
@@ -513,7 +498,7 @@ const PopupContainer: React.FC<Props> = ({
             getItemKey={getItemKey}
             estimateSize={estimateSize}
             isSticky={isSticky}
-            scrollPaddingStart={ITEM_HEIGHT} // 留出 sticky header 高度
+            scrollPaddingStart={ITEM_HEIGHT}
             overscan={5}
             scrollerStyle={{ pointerEvents: isMouseOver ? 'auto' : 'none' }}>
             {rowRenderer}
@@ -661,15 +646,22 @@ const PinIconWrapper = styled.div.attrs({ className: 'pin-icon' })<{ $isPinned?:
 
 const TopViewKey = 'SelectModelPopup'
 
-export class SelectModelPopup {
-  static topviewId = 0
-  static hide() {
-    TopView.hide(TopViewKey)
-  }
-
-  static show(params: PopupParams) {
-    return new Promise<Model | undefined>((resolve) => {
-      TopView.show(<PopupContainer {...params} resolve={(v) => resolve(v)} />, TopViewKey)
-    })
+export const createModelPopup = <TProps extends object, TResult>(
+  Component: React.ComponentType<TProps & { resolve: (value: TResult | undefined) => void }>
+) => {
+  return class {
+    static hide() {
+      TopView.hide(TopViewKey)
+    }
+    static show(params: Omit<TProps, 'resolve'>) {
+      return new Promise<TResult | undefined>((resolve) => {
+        const props = { ...params, resolve } as TProps & { resolve: (value: TResult | undefined) => void }
+        TopView.show(<Component {...props} />, TopViewKey)
+      })
+    }
   }
 }
+
+export const SelectModelPopup = createModelPopup<SelectModelPopupParams, Model>(SelectModelPopupView)
+
+export default SelectModelPopupView
