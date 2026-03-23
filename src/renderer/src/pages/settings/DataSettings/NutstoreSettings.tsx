@@ -1,9 +1,9 @@
 import { CheckOutlined, FolderOutlined, LoadingOutlined } from '@ant-design/icons'
+import BackupTypeModal, { type BackupArtifactType } from '@renderer/components/BackupTypeModal'
 import { HStack } from '@renderer/components/Layout'
 import NutstorePathPopup from '@renderer/components/Popups/NutsorePathPopup'
 import Selector from '@renderer/components/Selector'
 import { WebdavBackupManager } from '@renderer/components/WebdavBackupManager'
-import { useWebdavBackupModal, WebdavBackupModal } from '@renderer/components/WebdavModals'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useNutstoreSSO } from '@renderer/hooks/useNutstoreSSO'
 import { useTimer } from '@renderer/hooks/useTimer'
@@ -11,10 +11,14 @@ import {
   backupToNutstore,
   checkConnection,
   createDirectory,
+  importMobileSyncFromNutstore,
   restoreFromNutstore,
   startNutstoreAutoBackup,
-  stopNutstoreAutoBackup
+  stopNutstoreAutoBackup,
+  uploadMobileSyncToNutstore
 } from '@renderer/services/NutstoreService'
+import { buildBackupArtifactFileName } from '@renderer/services/BackupArtifactService'
+import { isMobileSyncRemoteFile } from '@renderer/services/MobileSyncService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import {
   setNutstoreAutoSync,
@@ -64,7 +68,11 @@ const NutstoreSettings: FC = () => {
   const [nsConnected, setNsConnected] = useState<boolean>(false)
   const [syncInterval, setSyncInterval] = useState<number>(nutstoreSyncInterval)
   const [nutSkipBackupFile, setNutSkipBackupFile] = useState<boolean>(nutstoreSkipBackupFile)
-  const [backupManagerVisible, setBackupManagerVisible] = useState(false)
+  const [managerType, setManagerType] = useState<BackupArtifactType | null>(null)
+  const [backupModalVisible, setBackupModalVisible] = useState(false)
+  const [backupType, setBackupType] = useState<BackupArtifactType>('pc')
+  const [backupFileName, setBackupFileName] = useState('')
+  const [backuping, setBackuping] = useState(false)
 
   const nutstoreSSOHandler = useNutstoreSSO()
   const { setTimeoutTimer } = useTimer()
@@ -126,11 +134,6 @@ const NutstoreSettings: FC = () => {
 
     setTimeoutTimer('handleCheckConnection', () => setNsConnected(false), 3000)
   }
-
-  const { isModalVisible, handleBackup, handleCancel, backuping, customFileName, setCustomFileName, showBackupModal } =
-    useWebdavBackupModal({
-      backupMethod: backupToNutstore
-    })
 
   const onSyncIntervalChange = (value: number) => {
     setSyncInterval(value)
@@ -196,12 +199,37 @@ const NutstoreSettings: FC = () => {
 
   const isLogin = nutstoreToken && nutstoreUsername
 
-  const showBackupManager = () => {
-    setBackupManagerVisible(true)
+  const openBackupModal = async () => {
+    setBackupType('pc')
+    setBackupFileName(await buildBackupArtifactFileName('pc'))
+    setBackupModalVisible(true)
   }
 
-  const closeBackupManager = () => {
-    setBackupManagerVisible(false)
+  const handleBackupTypeChange = async (value: BackupArtifactType) => {
+    setBackupType(value)
+    setBackupFileName(await buildBackupArtifactFileName(value))
+  }
+
+  const handleBackup = async () => {
+    setBackuping(true)
+    try {
+      if (backupType === 'app') {
+        const fileName = await uploadMobileSyncToNutstore({ customFileName: backupFileName })
+        window.toast.success(t('settings.data.nutstore.mobile_sync.upload.success', { fileName }))
+      } else {
+        await backupToNutstore({ showMessage: true, customFileName: backupFileName })
+      }
+
+      setBackupModalVisible(false)
+    } catch (error) {
+      window.toast.error((error as Error).message)
+    } finally {
+      setBackuping(false)
+    }
+  }
+
+  const openRestoreManager = () => {
+    setManagerType('pc')
   }
 
   const isSyncConfigured = Boolean(nutstoreToken && storagePath)
@@ -266,18 +294,18 @@ const NutstoreSettings: FC = () => {
           </SettingRow>
           <SettingDivider />
           <SettingRow>
-            <SettingRowTitle>{t('settings.data.auto_sync.manual.label')}</SettingRowTitle>
+            <SettingRowTitle>{t('settings.data.artifact_type.cross_device_title')}</SettingRowTitle>
             <HStack gap="5px" justifyContent="space-between">
-              <Button onClick={showBackupModal} loading={backuping}>
+              <Button onClick={() => void openBackupModal()} loading={backuping}>
                 {t('settings.data.nutstore.backup.button')}
               </Button>
-              <Button onClick={showBackupManager} disabled={!nutstoreToken}>
+              <Button onClick={openRestoreManager} disabled={!nutstoreToken}>
                 {t('settings.data.nutstore.restore.button')}
               </Button>
             </HStack>
           </SettingRow>
           <SettingRow>
-            <SettingHelpText>{t('settings.data.auto_sync.manual.help')}</SettingHelpText>
+            <SettingHelpText>{t('settings.data.artifact_type.cross_device_help')}</SettingHelpText>
           </SettingRow>
           <SettingDivider />
           <ManualSyncScheduleSettings provider="nutstore" isConfigured={isSyncConfigured} />
@@ -343,33 +371,50 @@ const NutstoreSettings: FC = () => {
         </>
       )}
       <>
-        <WebdavBackupModal
-          isModalVisible={isModalVisible}
-          handleBackup={handleBackup}
-          handleCancel={handleCancel}
-          backuping={backuping}
-          customFileName={customFileName}
-          setCustomFileName={setCustomFileName}
-          customLabels={{
-            modalTitle: t('settings.data.nutstore.backup.modal.title'),
-            filenamePlaceholder: t('settings.data.nutstore.backup.modal.filename.placeholder')
-          }}
-        />
-
         <WebdavBackupManager
-          visible={backupManagerVisible}
-          onClose={closeBackupManager}
+          visible={managerType !== null}
+          onClose={() => setManagerType(null)}
           webdavConfig={{
             webdavHost: NUTSTORE_HOST,
             webdavUser: nutstoreUsername,
             webdavPass: nutstorePass,
             webdavPath: storagePath
           }}
-          restoreMethod={restoreFromNutstore}
+          fileFilter={managerType === 'app' ? (file) => isMobileSyncRemoteFile(file.fileName) : undefined}
+          restoreMethod={(fileName) =>
+            managerType === 'app' ? importMobileSyncFromNutstore(fileName) : restoreFromNutstore(fileName)
+          }
+          artifactType={managerType || 'pc'}
+          onArtifactTypeChange={(value) => setManagerType(value)}
           customLabels={{
-            restoreConfirmTitle: t('settings.data.nutstore.restore.confirm.title'),
-            restoreConfirmContent: t('settings.data.nutstore.restore.confirm.content'),
+            managerTitle: t('settings.data.artifact_type.cross_device_title'),
+            restoreConfirmTitle:
+              managerType === 'app'
+                ? t('settings.data.nutstore.mobile_sync.restore.confirm.title')
+                : t('settings.data.nutstore.restore.confirm.title'),
+            restoreConfirmContent:
+              managerType === 'app'
+                ? t('settings.data.nutstore.mobile_sync.restore.confirm.content')
+                : t('settings.data.nutstore.restore.confirm.content'),
+            managerEmptyText: managerType === 'app' ? t('settings.data.nutstore.mobile_sync.manager.empty') : undefined,
+            restoreSuccessMessage:
+              managerType === 'app' ? t('settings.data.nutstore.mobile_sync.restore.success') : undefined,
             invalidConfigMessage: t('message.error.invalid.nutstore')
+          }}
+        />
+        <BackupTypeModal
+          open={backupModalVisible}
+          mode="backup"
+          artifactType={backupType}
+          onArtifactTypeChange={(value) => void handleBackupTypeChange(value)}
+          onConfirm={() => void handleBackup()}
+          onCancel={() => setBackupModalVisible(false)}
+          loading={backuping}
+          fileName={backupFileName}
+          onFileNameChange={setBackupFileName}
+          customLabels={{
+            title: t('settings.data.nutstore.backup.modal.title'),
+            filenamePlaceholder: t('settings.data.nutstore.backup.modal.filename.placeholder')
           }}
         />
       </>

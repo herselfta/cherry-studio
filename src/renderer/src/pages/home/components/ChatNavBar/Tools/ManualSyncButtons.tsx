@@ -6,7 +6,6 @@ import NavbarIcon from '@renderer/components/NavbarIcon'
 import { S3BackupManager } from '@renderer/components/S3BackupManager'
 import { S3BackupModal, useS3BackupModal } from '@renderer/components/S3Modals'
 import { WebdavBackupManager } from '@renderer/components/WebdavBackupManager'
-import { useWebdavBackupModal, WebdavBackupModal } from '@renderer/components/WebdavModals'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
 import {
@@ -17,7 +16,12 @@ import {
   restoreMigrationFromLocal
 } from '@renderer/services/BackupService'
 import { buildBackupArtifactFileName } from '@renderer/services/BackupArtifactService'
-import { backupToNutstore, restoreFromNutstore } from '@renderer/services/NutstoreService'
+import {
+  backupToNutstore,
+  importMobileSyncFromNutstore,
+  restoreFromNutstore,
+  uploadMobileSyncToNutstore
+} from '@renderer/services/NutstoreService'
 import {
   backupMobileSyncToLocal,
   importMobileSyncFromWebdav,
@@ -40,7 +44,7 @@ interface ManualSyncButtonsProps {
   className?: string
 }
 
-type QuickProvider = 'webdav' | 'local'
+type QuickProvider = 'webdav' | 'local' | 'nutstore'
 type BackupManagerType = 'webdav' | 'local' | 's3' | 'nutstore' | null
 
 const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizontal', className }) => {
@@ -60,16 +64,7 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
   const [quickLoading, setQuickLoading] = useState(false)
   const [webdavRestoreArtifactType, setWebdavRestoreArtifactType] = useState<BackupArtifactType>('pc')
   const [localRestoreArtifactType, setLocalRestoreArtifactType] = useState<BackupArtifactType>('pc')
-
-  const {
-    isModalVisible: isNutstoreBackupModalVisible,
-    handleBackup: handleNutstoreBackup,
-    handleCancel: handleCancelNutstoreBackup,
-    backuping: nutstoreBackuping,
-    customFileName: nutstoreFileName,
-    setCustomFileName: setNutstoreFileName,
-    showBackupModal: showNutstoreBackupModal
-  } = useWebdavBackupModal({ backupMethod: backupToNutstore })
+  const [nutstoreRestoreArtifactType, setNutstoreRestoreArtifactType] = useState<BackupArtifactType>('pc')
   const {
     isModalVisible: isS3BackupModalVisible,
     handleBackup: handleS3Backup,
@@ -155,6 +150,16 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
             customFileName: quickFileName
           })
         }
+      } else if (quickProvider === 'nutstore') {
+        if (quickArtifactType === 'app') {
+          const fileName = await uploadMobileSyncToNutstore({ customFileName: quickFileName })
+          window.toast.success(t('settings.data.nutstore.mobile_sync.upload.success', { fileName }))
+        } else {
+          await backupToNutstore({
+            showMessage: true,
+            customFileName: quickFileName
+          })
+        }
       } else if (quickArtifactType === 'app') {
         const fileName = await uploadMobileSyncToWebdav(currentWebdavConfig, quickFileName)
         window.toast.success(t('settings.data.webdav.mobile_sync.upload.success', { fileName }))
@@ -204,20 +209,11 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
         label: t('settings.data.manual_schedule.providers.nutstore'),
         disabled: !isNutstoreConfigured,
         onClick: () => {
-          void showNutstoreBackupModal()
+          void openQuickModal('nutstore')
         }
       }
     ],
-    [
-      isLocalConfigured,
-      isNutstoreConfigured,
-      isS3Configured,
-      isWebdavConfigured,
-      openQuickModal,
-      showNutstoreBackupModal,
-      showS3BackupModal,
-      t
-    ]
+    [isLocalConfigured, isNutstoreConfigured, isS3Configured, isWebdavConfigured, openQuickModal, showS3BackupModal, t]
   )
 
   const restoreItems = useMemo<ItemType[]>(
@@ -250,7 +246,10 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
         key: 'restore-nutstore',
         label: t('settings.data.manual_schedule.providers.nutstore'),
         disabled: !isNutstoreConfigured,
-        onClick: () => setBackupManagerType('nutstore')
+        onClick: () => {
+          setNutstoreRestoreArtifactType('pc')
+          setBackupManagerType('nutstore')
+        }
       }
     ],
     [isLocalConfigured, isNutstoreConfigured, isS3Configured, isWebdavConfigured, t]
@@ -299,18 +298,6 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
         </Dropdown>
       </HStack>
 
-      <WebdavBackupModal
-        isModalVisible={isNutstoreBackupModalVisible}
-        handleBackup={handleNutstoreBackup}
-        handleCancel={handleCancelNutstoreBackup}
-        backuping={nutstoreBackuping}
-        customFileName={nutstoreFileName}
-        setCustomFileName={setNutstoreFileName}
-        customLabels={{
-          modalTitle: t('settings.data.nutstore.backup.modal.title'),
-          filenamePlaceholder: t('settings.data.nutstore.backup.modal.filename.placeholder')
-        }}
-      />
       <S3BackupModal
         isModalVisible={isS3BackupModalVisible}
         handleBackup={handleS3Backup}
@@ -382,10 +369,26 @@ const ManualSyncButtons: FC<ManualSyncButtonsProps> = ({ orientation = 'horizont
           webdavPass: nutstoreAuth?.accessToken,
           webdavPath: nutstorePath
         }}
-        restoreMethod={restoreFromNutstore}
+        fileFilter={nutstoreRestoreArtifactType === 'app' ? (file) => isMobileSyncRemoteFile(file.fileName) : undefined}
+        restoreMethod={(fileName) =>
+          nutstoreRestoreArtifactType === 'app' ? importMobileSyncFromNutstore(fileName) : restoreFromNutstore(fileName)
+        }
+        artifactType={nutstoreRestoreArtifactType}
+        onArtifactTypeChange={(value) => setNutstoreRestoreArtifactType(value)}
         customLabels={{
-          restoreConfirmTitle: t('settings.data.nutstore.restore.confirm.title'),
-          restoreConfirmContent: t('settings.data.nutstore.restore.confirm.content'),
+          managerTitle: t('settings.data.artifact_type.cross_device_title'),
+          restoreConfirmTitle:
+            nutstoreRestoreArtifactType === 'app'
+              ? t('settings.data.nutstore.mobile_sync.restore.confirm.title')
+              : t('settings.data.nutstore.restore.confirm.title'),
+          restoreConfirmContent:
+            nutstoreRestoreArtifactType === 'app'
+              ? t('settings.data.nutstore.mobile_sync.restore.confirm.content')
+              : t('settings.data.nutstore.restore.confirm.content'),
+          managerEmptyText:
+            nutstoreRestoreArtifactType === 'app' ? t('settings.data.nutstore.mobile_sync.manager.empty') : undefined,
+          restoreSuccessMessage:
+            nutstoreRestoreArtifactType === 'app' ? t('settings.data.nutstore.mobile_sync.restore.success') : undefined,
           invalidConfigMessage: t('message.error.invalid.nutstore')
         }}
       />

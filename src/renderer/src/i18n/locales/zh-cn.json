@@ -4067,6 +4067,21 @@
           "return": "返回",
           "title": "坚果云存储路径"
         },
+        "mobile_sync": {
+          "manager": {
+            "empty": "未找到手机同步文件"
+          },
+          "restore": {
+            "confirm": {
+              "content": "将从坚果云导入手机同步数据并合并到当前数据，是否继续？",
+              "title": "确认同步"
+            },
+            "success": "同步成功，应用将在几秒后刷新"
+          },
+          "upload": {
+            "success": "已将 {{fileName}} 同步到坚果云"
+          }
+        },
         "restore": {
           "button": "从坚果云恢复",
           "confirm": {

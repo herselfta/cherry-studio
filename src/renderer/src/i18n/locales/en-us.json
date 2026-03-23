@@ -4067,6 +4067,21 @@
           "return": "Return",
           "title": "Nutstore Storage Path"
         },
+        "mobile_sync": {
+          "manager": {
+            "empty": "No mobile sync files found"
+          },
+          "restore": {
+            "confirm": {
+              "content": "Import the mobile sync payload from Nutstore and merge it into current data?",
+              "title": "Confirm Sync"
+            },
+            "success": "Sync successful, the application will refresh shortly"
+          },
+          "upload": {
+            "success": "Synced {{fileName}} to Nutstore"
+          }
+        },
         "restore": {
           "button": "Restore from Nutstore",
           "confirm": {

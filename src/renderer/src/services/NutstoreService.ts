@@ -8,6 +8,7 @@ import dayjs from 'dayjs'
 import { type CreateDirectoryOptions } from 'webdav'
 
 import { getBackupData, handleData, isMigrationBackupFile, LEGACY_INTERNAL_BACKUP_FILE_NAME } from './BackupService'
+import { importMobileSyncFromWebdav, uploadMobileSyncToWebdav } from './MobileSyncService'
 
 const logger = loggerService.withContext('NutstoreService')
 
@@ -164,11 +165,14 @@ export async function backupToNutstore({
     // Nutstore is a remote backend, so it must upload the portable migration payload
     // instead of direct storage snapshots. Keeping this aligned with WebDAV/S3 avoids
     // another cross-platform regression when users switch transport providers.
-    const isSuccess = await window.api.backup.backupMigrationToWebdav({
-      ...config,
-      fileName: finalFileName,
-      skipBackupFile: skipBackupFile
-    }, await getBackupData())
+    const isSuccess = await window.api.backup.backupMigrationToWebdav(
+      {
+        ...config,
+        fileName: finalFileName,
+        skipBackupFile: skipBackupFile
+      },
+      await getBackupData()
+    )
 
     if (isSuccess) {
       store.dispatch(setNutstoreSyncState({ lastSyncError: null }))
@@ -193,6 +197,23 @@ export async function backupToNutstore({
     }
     isManualBackupRunning = false
   }
+}
+
+export async function uploadMobileSyncToNutstore({ customFileName = '' }: { customFileName?: string } = {}) {
+  const nutstoreToken = getNutstoreToken()
+  if (!nutstoreToken) {
+    throw new Error(i18n.t('message.error.invalid.nutstore_token'))
+  }
+
+  const config = await createNutstoreConfig(nutstoreToken)
+  if (!config) {
+    throw new Error(i18n.t('message.error.invalid.nutstore'))
+  }
+
+  // Nutstore is still a WebDAV backend, so APP sync must upload the same shared-data
+  // JSON artifact used by generic WebDAV. Keeping one portable format here prevents
+  // future regressions where Nutstore silently drifts back to desktop-only backups.
+  return uploadMobileSyncToWebdav(config, customFileName)
 }
 
 export async function restoreFromNutstore(fileName?: string) {
@@ -224,6 +245,20 @@ export async function restoreFromNutstore(fileName?: string) {
     logger.error('[backup] Error downloading file from WebDAV:', error as Error)
     window.toast.error(i18n.t('error.backup.file_format'))
   }
+}
+
+export async function importMobileSyncFromNutstore(fileName: string) {
+  const nutstoreToken = getNutstoreToken()
+  if (!nutstoreToken) {
+    throw new Error(i18n.t('message.error.invalid.nutstore_token'))
+  }
+
+  const config = await createNutstoreConfig(nutstoreToken)
+  if (!config) {
+    throw new Error(i18n.t('message.error.invalid.nutstore'))
+  }
+
+  return importMobileSyncFromWebdav(config, fileName)
 }
 
 export async function startNutstoreAutoBackup() {
