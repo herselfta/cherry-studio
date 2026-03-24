@@ -71,6 +71,7 @@ files:
 asarUnpack:
   - resources/**
   - "**/*.{metal,exp,lib}"
+  - "node_modules/@napi-rs/canvas-*/**/*.node"
   - "node_modules/@img/sharp-libvips-*/**"
 
 win:

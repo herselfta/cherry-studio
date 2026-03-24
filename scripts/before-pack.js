@@ -30,12 +30,25 @@ const packages = [
   '@libsql/linux-arm64-musl',
   '@libsql/linux-x64-musl',
   '@libsql/win32-x64-msvc',
+  // Keep canvas native bindings in the pack list. Electron main now installs
+  // PDF runtime polyfills via @napi-rs/canvas during startup, so dropping these
+  // optional platform packages results in packaged apps crashing on launch.
+  '@napi-rs/canvas-darwin-arm64',
+  '@napi-rs/canvas-darwin-x64',
+  '@napi-rs/canvas-linux-arm64-gnu',
+  '@napi-rs/canvas-linux-arm64-musl',
+  '@napi-rs/canvas-linux-x64-gnu',
+  '@napi-rs/canvas-linux-x64-musl',
+  '@napi-rs/canvas-win32-arm64-msvc',
+  '@napi-rs/canvas-win32-x64-msvc',
   '@napi-rs/system-ocr-darwin-arm64',
   '@napi-rs/system-ocr-darwin-x64',
   '@napi-rs/system-ocr-win32-arm64-msvc',
   '@napi-rs/system-ocr-win32-x64-msvc',
   '@strongtz/win32-arm64-msvc'
 ]
+
+exports.nativePrebuildPackages = packages
 
 const platformToArch = {
   mac: 'darwin',
