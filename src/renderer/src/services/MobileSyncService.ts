@@ -6,6 +6,11 @@ import type { Assistant, MCPServer, Provider, Topic, WebDavConfig, WebSearchProv
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
 
 import { BACKUP_AWARE_LOCAL_STORAGE_KEYS, PERSISTED_REDUX_STATE_STORAGE_KEY } from './BackupLocalStorage'
+import {
+  buildDesktopSyncAssistantState,
+  filterDesktopSyncMessageBlocks,
+  normalizeDesktopSyncTopics
+} from './mobileSyncUtils'
 
 const logger = loggerService.withContext('MobileSyncService')
 
@@ -170,10 +175,6 @@ function mergeById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
     merged.set(item.id, { ...merged.get(item.id), ...item })
   }
   return Array.from(merged.values())
-}
-
-function mergeTopicsForAssistant(current: Topic[], incoming: Topic[]): Topic[] {
-  return mergeById(current, incoming)
 }
 
 function toDesktopTopics(topics: Topic[] | SyncTopic[] | undefined): Topic[] {
@@ -404,23 +405,33 @@ export async function importMobileSyncPayload(payload: string) {
   const currentWebsearch = readPersistedSlice(persistedState, 'websearch', store.getState().websearch)
   const currentSettings = readPersistedSlice(persistedState, 'settings', store.getState().settings)
   const currentMcp = readPersistedSlice(persistedState, 'mcp', store.getState().mcp)
-
-  const incomingAssistants = parsed.data.assistants.assistants.map((assistant) => ({
-    ...assistant,
-    topics: mergeTopicsForAssistant(
-      currentAssistants.assistants.find((item: Assistant) => item.id === assistant.id)?.topics || [],
-      toDesktopTopics(assistant.topics)
-    )
-  }))
-
-  const mergedDefaultAssistant = {
-    ...currentAssistants.defaultAssistant,
-    ...parsed.data.assistants.defaultAssistant,
-    topics: mergeTopicsForAssistant(
-      currentAssistants.defaultAssistant.topics || [],
-      toDesktopTopics(parsed.data.assistants.defaultAssistant.topics)
-    )
-  }
+  const incomingMessages = parsed.data.messages.map(toDesktopMessage)
+  const embeddedTopics = [
+    ...toDesktopTopics(parsed.data.assistants.defaultAssistant.topics),
+    ...parsed.data.assistants.assistants.flatMap((assistant) => toDesktopTopics(assistant.topics))
+  ]
+  const { synthesizedTopicCount, topics: normalizedTopics } = normalizeDesktopSyncTopics(
+    toDesktopTopics(parsed.data.topics),
+    embeddedTopics,
+    incomingMessages
+  )
+  const { droppedBlockCount, messageBlocks: normalizedMessageBlocks } = filterDesktopSyncMessageBlocks(
+    parsed.data.messageBlocks.map(toDesktopMessageBlock),
+    incomingMessages
+  )
+  const { assistants: incomingAssistants, defaultAssistant: mergedDefaultAssistant } = buildDesktopSyncAssistantState({
+    currentDefaultAssistant: currentAssistants.defaultAssistant,
+    currentAssistants: currentAssistants.assistants,
+    incomingDefaultAssistant: {
+      ...parsed.data.assistants.defaultAssistant,
+      topics: toDesktopTopics(parsed.data.assistants.defaultAssistant.topics)
+    },
+    incomingAssistants: parsed.data.assistants.assistants.map((assistant) => ({
+      ...assistant,
+      topics: toDesktopTopics(assistant.topics)
+    })),
+    normalizedTopics
+  })
 
   writePersistedSlice(persistedState, 'assistants', {
     ...currentAssistants,
@@ -460,15 +471,13 @@ export async function importMobileSyncPayload(payload: string) {
   }
 
   await db.transaction('rw', db.table('topics'), db.table('message_blocks'), db.table('settings'), async () => {
-    for (const topic of parsed.data.topics) {
+    for (const topic of normalizedTopics) {
       const existing = (await db.table('topics').get(topic.id)) as { id: string; messages?: Message[] } | undefined
-      const incomingMessages = parsed.data.messages
-        .filter((message) => message.topicId === topic.id)
-        .map(toDesktopMessage)
+      const topicMessages = incomingMessages.filter((message) => message.topicId === topic.id)
       const mergedMessages = sortMessages(
         mergeById<Message>(
           existing?.messages || [],
-          incomingMessages.map((message) => ({ ...message }))
+          topicMessages.map((message) => ({ ...message }))
         )
       )
 
@@ -478,8 +487,8 @@ export async function importMobileSyncPayload(payload: string) {
       })
     }
 
-    if (parsed.data.messageBlocks.length > 0) {
-      await db.table('message_blocks').bulkPut(parsed.data.messageBlocks.map(toDesktopMessageBlock))
+    if (normalizedMessageBlocks.length > 0) {
+      await db.table('message_blocks').bulkPut(normalizedMessageBlocks)
     }
 
     if (parsed.data.settings.avatar) {
@@ -489,6 +498,14 @@ export async function importMobileSyncPayload(payload: string) {
       })
     }
   })
+
+  if (synthesizedTopicCount > 0) {
+    logger.warn(`Synthesized ${synthesizedTopicCount} missing topic record(s) from mobile sync messages`)
+  }
+
+  if (droppedBlockCount > 0) {
+    logger.warn(`Dropped ${droppedBlockCount} orphan message block(s) during mobile sync import`)
+  }
 
   logger.info('Mobile sync payload imported. Relaunching to refresh Redux and Dexie bindings.')
   setTimeout(() => window.api.relaunchApp(), 300)
