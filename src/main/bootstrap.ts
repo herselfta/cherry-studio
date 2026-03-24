@@ -4,6 +4,9 @@ import fs from 'fs'
 import path from 'path'
 
 import { initAppDataDir } from './utils/init'
+import { installPdfRuntimePolyfills } from './utils/installPdfRuntimePolyfills'
+
+installPdfRuntimePolyfills()
 
 app.isPackaged && initAppDataDir()
 

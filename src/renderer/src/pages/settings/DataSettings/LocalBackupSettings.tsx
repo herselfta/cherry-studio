@@ -7,6 +7,7 @@ import { LocalBackupModal, useLocalBackupModal } from '@renderer/components/Loca
 import Selector from '@renderer/components/Selector'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
+import { buildBackupArtifactFileName } from '@renderer/services/BackupArtifactService'
 import {
   backupMigrationToLocal,
   isMigrationBackupFile,
@@ -14,7 +15,6 @@ import {
   startAutoBackup,
   stopAutoBackup
 } from '@renderer/services/BackupService'
-import { buildBackupArtifactFileName } from '@renderer/services/BackupArtifactService'
 import {
   backupMobileSyncToLocal,
   isMobileSyncRemoteFile,

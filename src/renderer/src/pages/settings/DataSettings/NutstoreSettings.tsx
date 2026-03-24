@@ -7,6 +7,8 @@ import { WebdavBackupManager } from '@renderer/components/WebdavBackupManager'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useNutstoreSSO } from '@renderer/hooks/useNutstoreSSO'
 import { useTimer } from '@renderer/hooks/useTimer'
+import { buildBackupArtifactFileName } from '@renderer/services/BackupArtifactService'
+import { isMobileSyncRemoteFile } from '@renderer/services/MobileSyncService'
 import {
   backupToNutstore,
   checkConnection,
@@ -17,8 +19,6 @@ import {
   stopNutstoreAutoBackup,
   uploadMobileSyncToNutstore
 } from '@renderer/services/NutstoreService'
-import { buildBackupArtifactFileName } from '@renderer/services/BackupArtifactService'
-import { isMobileSyncRemoteFile } from '@renderer/services/MobileSyncService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import {
   setNutstoreAutoSync,

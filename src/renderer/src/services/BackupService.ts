@@ -9,17 +9,17 @@ import { uuid } from '@renderer/utils'
 import dayjs from 'dayjs'
 
 import {
-  BACKUP_LOCAL_STORAGE_VERSION,
-  createBackupLocalStorageSnapshot,
-  restoreBackupLocalStorageSnapshot
-} from './BackupLocalStorage'
-import {
   buildBackupArtifactFileName,
   isRemotePortablePcArtifactFile,
   isStrictPcMigrationArtifactFile,
   LEGACY_PORTABLE_BACKUP_FILE_NAME,
   PC_MIGRATION_BACKUP_MARKER
 } from './BackupArtifactService'
+import {
+  BACKUP_LOCAL_STORAGE_VERSION,
+  createBackupLocalStorageSnapshot,
+  restoreBackupLocalStorageSnapshot
+} from './BackupLocalStorage'
 import { NotificationService } from './NotificationService'
 
 const logger = loggerService.withContext('BackupService')

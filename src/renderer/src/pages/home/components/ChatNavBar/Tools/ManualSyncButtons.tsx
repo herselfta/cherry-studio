@@ -8,6 +8,7 @@ import { S3BackupModal, useS3BackupModal } from '@renderer/components/S3Modals'
 import { WebdavBackupManager } from '@renderer/components/WebdavBackupManager'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
+import { buildBackupArtifactFileName } from '@renderer/services/BackupArtifactService'
 import {
   backupMigrationToLocal,
   backupToWebdavWithConfig,
@@ -15,13 +16,6 @@ import {
   restoreFromWebdavWithConfig,
   restoreMigrationFromLocal
 } from '@renderer/services/BackupService'
-import { buildBackupArtifactFileName } from '@renderer/services/BackupArtifactService'
-import {
-  backupToNutstore,
-  importMobileSyncFromNutstore,
-  restoreFromNutstore,
-  uploadMobileSyncToNutstore
-} from '@renderer/services/NutstoreService'
 import {
   backupMobileSyncToLocal,
   importMobileSyncFromWebdav,
@@ -29,6 +23,12 @@ import {
   restoreMobileSyncFromLocal,
   uploadMobileSyncToWebdav
 } from '@renderer/services/MobileSyncService'
+import {
+  backupToNutstore,
+  importMobileSyncFromNutstore,
+  restoreFromNutstore,
+  uploadMobileSyncToNutstore
+} from '@renderer/services/NutstoreService'
 import { useAppSelector } from '@renderer/store'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
 import { Dropdown, Tooltip } from 'antd'
