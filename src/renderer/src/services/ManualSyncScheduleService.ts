@@ -9,7 +9,7 @@ import {
   backupToLocal,
   backupToS3,
   backupToWebdav,
-  isMigrationBackupFile,
+  isRemotePortablePcBackupFile,
   LEGACY_INTERNAL_BACKUP_FILE_NAME,
   restoreFromLocal,
   restoreFromS3,
@@ -147,11 +147,12 @@ export function getNextManualSyncOccurrence(now: Date, times: string[]): Date | 
 }
 
 export function pickLatestManualBackup(files: BackupFile[], portableOnly = false): BackupFile | null {
+  // Scheduled restore must share the same remote PC classifier as the restore UI.
+  // If this drifts back to `.migration.` only, older WebDAV / Nutstore uploads vanish
+  // from automation even when they are still visible in the manual restore dialog.
   return (
-    files.find(
-      (file) =>
-        file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME &&
-        (!portableOnly || isMigrationBackupFile(file.fileName))
+    files.find((file) =>
+      portableOnly ? isRemotePortablePcBackupFile(file.fileName) : file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME
     ) ?? null
   )
 }

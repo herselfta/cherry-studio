@@ -12,6 +12,11 @@ vi.mock('@renderer/components/Layout', () => ({
   )
 }))
 
+vi.mock('@renderer/components/BackupTypeModal', () => ({
+  __esModule: true,
+  default: () => null
+}))
+
 vi.mock('@renderer/components/LocalBackupManager', () => ({
   LocalBackupManager: () => null
 }))
@@ -107,6 +112,10 @@ vi.mock('antd', () => ({
 }))
 
 vi.mock('react-i18next', () => ({
+  initReactI18next: {
+    type: '3rdParty',
+    init: vi.fn()
+  },
   useTranslation: () => ({
     t: (key: string) => key
   })

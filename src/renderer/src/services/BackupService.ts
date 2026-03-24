@@ -13,18 +13,29 @@ import {
   createBackupLocalStorageSnapshot,
   restoreBackupLocalStorageSnapshot
 } from './BackupLocalStorage'
+import {
+  buildBackupArtifactFileName,
+  isRemotePortablePcArtifactFile,
+  isStrictPcMigrationArtifactFile,
+  LEGACY_PORTABLE_BACKUP_FILE_NAME,
+  PC_MIGRATION_BACKUP_MARKER
+} from './BackupArtifactService'
 import { NotificationService } from './NotificationService'
 
 const logger = loggerService.withContext('BackupService')
 
-export const LEGACY_INTERNAL_BACKUP_FILE_NAME = 'cherry-studio.sync.zip'
-export const MIGRATION_BACKUP_MARKER = '.migration.'
+export const LEGACY_INTERNAL_BACKUP_FILE_NAME = LEGACY_PORTABLE_BACKUP_FILE_NAME
+export const MIGRATION_BACKUP_MARKER = PC_MIGRATION_BACKUP_MARKER
 
 export function isMigrationBackupFile(fileName: string) {
   // Migration backups intentionally keep using the legacy logical export format.
   // We tag new files explicitly so the local UI can separate portable archives from
   // same-platform direct snapshots and avoid restoring the wrong format by mistake.
-  return fileName.includes(MIGRATION_BACKUP_MARKER) || fileName === LEGACY_INTERNAL_BACKUP_FILE_NAME
+  return isStrictPcMigrationArtifactFile(fileName)
+}
+
+export function isRemotePortablePcBackupFile(fileName: string) {
+  return isRemotePortablePcArtifactFile(fileName)
 }
 
 // 重试删除S3文件的辅助函数
@@ -233,23 +244,24 @@ export async function backupToWebdav({
   } catch (error) {
     logger.error('Failed to get device type or hostname:', error as Error)
   }
-  const timestamp = dayjs().format('YYYYMMDDHHmmss')
-  const backupFileName = customFileName || `cherry-studio.${timestamp}.${hostname}.${deviceType}.zip`
-  const migrationFileName = backupFileName.replace('cherry-studio.', `cherry-studio${MIGRATION_BACKUP_MARKER}`)
-  const finalFileName = migrationFileName.endsWith('.zip') ? migrationFileName : `${migrationFileName}.zip`
+  const backupFileName = customFileName || (await buildBackupArtifactFileName('pc'))
+  const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
 
   // Remote backups must stay cross-platform portable. Do not switch WebDAV back to
   // direct backup snapshots unless cross-platform restore is intentionally dropped.
   try {
-    const success = await window.api.backup.backupMigrationToWebdav({
-      webdavHost,
-      webdavUser,
-      webdavPass,
-      webdavPath,
-      fileName: finalFileName,
-      skipBackupFile: webdavSkipBackupFile,
-      disableStream: webdavDisableStream
-    }, await getBackupData())
+    const success = await window.api.backup.backupMigrationToWebdav(
+      {
+        webdavHost,
+        webdavUser,
+        webdavPass,
+        webdavPath,
+        fileName: finalFileName,
+        skipBackupFile: webdavSkipBackupFile,
+        disableStream: webdavDisableStream
+      },
+      await getBackupData()
+    )
     if (success) {
       store.dispatch(
         setWebDAVSyncState({
@@ -286,7 +298,7 @@ export async function backupToWebdav({
             (file) =>
               file.fileName.includes(deviceType) &&
               file.fileName.includes(hostname) &&
-              isMigrationBackupFile(file.fileName)
+              isRemotePortablePcBackupFile(file.fileName)
           )
 
           // 如果当前设备的备份文件数量超过最大保留数量，删除最旧的文件
@@ -386,26 +398,17 @@ export async function backupToWebdavWithConfig(
   store.dispatch(setWebDAVSyncState({ syncing: true, lastSyncError: null }))
 
   const { webdavMaxBackups } = store.getState().settings
-  let deviceType = 'unknown'
-  let hostname = 'unknown'
+  const backupFileName = customFileName || (await buildBackupArtifactFileName('pc'))
+  const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
 
   try {
-    deviceType = (await window.api.system.getDeviceType()) || 'unknown'
-    hostname = (await window.api.system.getHostname()) || 'unknown'
-  } catch (error) {
-    logger.error('Failed to get device type or hostname:', error as Error)
-  }
-
-  const timestamp = dayjs().format('YYYYMMDDHHmmss')
-  const backupFileName = customFileName || `cherry-studio.${timestamp}.${hostname}.${deviceType}.zip`
-  const migrationFileName = backupFileName.replace('cherry-studio.', `cherry-studio${MIGRATION_BACKUP_MARKER}`)
-  const finalFileName = migrationFileName.endsWith('.zip') ? migrationFileName : `${migrationFileName}.zip`
-
-  try {
-    const success = await window.api.backup.backupMigrationToWebdav({
-      ...webdavConfig,
-      fileName: finalFileName
-    }, await getBackupData())
+    const success = await window.api.backup.backupMigrationToWebdav(
+      {
+        ...webdavConfig,
+        fileName: finalFileName
+      },
+      await getBackupData()
+    )
 
     if (success) {
       store.dispatch(
@@ -431,10 +434,7 @@ export async function backupToWebdavWithConfig(
         try {
           const files = await window.api.backup.listWebdavFiles(webdavConfig)
           const currentDeviceFiles = files
-            .filter(
-              (file) =>
-                file.fileName.startsWith(`cherry-studio${MIGRATION_BACKUP_MARKER}`) && file.fileName.endsWith('.zip')
-            )
+            .filter((file) => isRemotePortablePcBackupFile(file.fileName))
             .sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
 
           if (currentDeviceFiles.length > webdavMaxBackups) {
@@ -573,16 +573,17 @@ export async function backupToS3({
   } catch (error) {
     logger.error('Failed to get device type or hostname:', error as Error)
   }
-  const timestamp = dayjs().format('YYYYMMDDHHmmss')
-  const backupFileName = customFileName || `cherry-studio.${timestamp}.${hostname}.${deviceType}.zip`
-  const migrationFileName = backupFileName.replace('cherry-studio.', `cherry-studio${MIGRATION_BACKUP_MARKER}`)
-  const finalFileName = migrationFileName.endsWith('.zip') ? migrationFileName : `${migrationFileName}.zip`
+  const backupFileName = customFileName || (await buildBackupArtifactFileName('pc'))
+  const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
 
   try {
-    const success = await window.api.backup.backupMigrationToS3({
-      ...s3Config,
-      fileName: finalFileName
-    }, await getBackupData())
+    const success = await window.api.backup.backupMigrationToS3(
+      {
+        ...s3Config,
+        fileName: finalFileName
+      },
+      await getBackupData()
+    )
 
     if (success) {
       store.dispatch(
@@ -614,7 +615,11 @@ export async function backupToS3({
 
           // 筛选当前设备的备份文件
           const currentDeviceFiles = files.filter((file) => {
-            return file.fileName.includes(deviceType) && file.fileName.includes(hostname)
+            return (
+              file.fileName.includes(deviceType) &&
+              file.fileName.includes(hostname) &&
+              isRemotePortablePcBackupFile(file.fileName)
+            )
           })
 
           // 如果当前设备的备份文件数量超过最大保留数量，删除最旧的文件
@@ -1281,23 +1286,10 @@ export async function backupMigrationToLocal({
   isManualBackupRunning = true
   store.dispatch(setLocalBackupSyncState({ syncing: true, lastSyncError: null }))
 
-  const {
-    localBackupDir: localBackupDirSetting,
-    localBackupSkipBackupFile
-  } = store.getState().settings
+  const { localBackupDir: localBackupDirSetting, localBackupSkipBackupFile } = store.getState().settings
   const localBackupDir = await window.api.resolvePath(localBackupDirSetting)
 
-  let deviceType = 'unknown'
-  let hostname = 'unknown'
-  try {
-    deviceType = (await window.api.system.getDeviceType()) || 'unknown'
-    hostname = (await window.api.system.getHostname()) || 'unknown'
-  } catch (error) {
-    logger.error('Failed to get device type or hostname:', error as Error)
-  }
-
-  const timestamp = dayjs().format('YYYYMMDDHHmmss')
-  const backupFileName = customFileName || `cherry-studio${MIGRATION_BACKUP_MARKER}${timestamp}.${hostname}.${deviceType}.zip`
+  const backupFileName = customFileName || (await buildBackupArtifactFileName('pc'))
   const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
 
   try {

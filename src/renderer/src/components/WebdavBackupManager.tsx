@@ -1,9 +1,5 @@
 import { DeleteOutlined, ExclamationCircleOutlined, ReloadOutlined } from '@ant-design/icons'
-import {
-  isMigrationBackupFile,
-  LEGACY_INTERNAL_BACKUP_FILE_NAME,
-  restoreFromWebdav
-} from '@renderer/services/BackupService'
+import { isRemotePortablePcBackupFile, restoreFromWebdav } from '@renderer/services/BackupService'
 import { formatFileSize } from '@renderer/utils'
 import { Button, message, Modal, Segmented, Table, Tooltip } from 'antd'
 import dayjs from 'dayjs'
@@ -85,9 +81,10 @@ export function WebdavBackupManager({
         webdavPass,
         webdavPath
       } as WebdavConfig)
-      const visibleFiles = (fileFilter
-        ? files.filter((file) => fileFilter(file))
-        : files.filter((file) => file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME && isMigrationBackupFile(file.fileName))
+      const visibleFiles = (
+        fileFilter
+          ? files.filter((file) => fileFilter(file))
+          : files.filter((file) => isRemotePortablePcBackupFile(file.fileName))
       ).sort((left, right) => new Date(right.modifiedTime).getTime() - new Date(left.modifiedTime).getTime())
       setBackupFiles(visibleFiles)
       setPagination((prev) => ({
@@ -214,7 +211,9 @@ export function WebdavBackupManager({
         setRestoring(true)
         try {
           await (restoreMethod || restoreFromWebdav)(fileName)
-          window.toast.success(customLabels?.restoreSuccessMessage || t('settings.data.webdav.backup.manager.restore.success'))
+          window.toast.success(
+            customLabels?.restoreSuccessMessage || t('settings.data.webdav.backup.manager.restore.success')
+          )
           onClose() // 关闭模态框
         } catch (error: any) {
           window.toast.error(`${t('settings.data.webdav.backup.manager.restore.error')}: ${error.message}`)

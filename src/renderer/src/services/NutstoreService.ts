@@ -4,10 +4,10 @@ import store from '@renderer/store'
 import { setNutstoreSyncState } from '@renderer/store/nutstore'
 import type { WebDavConfig } from '@renderer/types'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
-import dayjs from 'dayjs'
 import { type CreateDirectoryOptions } from 'webdav'
 
-import { getBackupData, handleData, isMigrationBackupFile, LEGACY_INTERNAL_BACKUP_FILE_NAME } from './BackupService'
+import { buildBackupArtifactFileName } from './BackupArtifactService'
+import { getBackupData, handleData, isRemotePortablePcBackupFile } from './BackupService'
 import { importMobileSyncFromWebdav, uploadMobileSyncToWebdav } from './MobileSyncService'
 
 const logger = loggerService.withContext('NutstoreService')
@@ -78,13 +78,7 @@ async function cleanupOldBackups(webdavConfig: WebDavConfig, maxBackups: number)
     }
 
     const backupFiles = files
-      .filter(
-        (file) =>
-          file.fileName.startsWith('cherry-studio') &&
-          file.fileName.endsWith('.zip') &&
-          file.fileName !== LEGACY_INTERNAL_BACKUP_FILE_NAME &&
-          isMigrationBackupFile(file.fileName)
-      )
+      .filter((file) => isRemotePortablePcBackupFile(file.fileName))
       .sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
 
     if (backupFiles.length < maxBackups) {
@@ -141,14 +135,7 @@ export async function backupToNutstore({
     return
   }
 
-  let deviceType = 'unknown'
-  try {
-    deviceType = (await window.api.system.getDeviceType()) || 'unknown'
-  } catch (error) {
-    logger.error('[backupToNutstore] Failed to get device type:', error as Error)
-  }
-  const timestamp = dayjs().format('YYYYMMDDHHmmss')
-  const backupFileName = customFileName || `cherry-studio.migration.${timestamp}.${deviceType}.zip`
+  const backupFileName = customFileName || (await buildBackupArtifactFileName('pc'))
   const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
 
   isManualBackupRunning = true
