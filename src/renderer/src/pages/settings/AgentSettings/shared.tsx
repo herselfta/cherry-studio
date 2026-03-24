@@ -14,9 +14,9 @@ import type {
   UpdateAgentSessionFunction
 } from '@renderer/types'
 import { AgentConfigurationSchema } from '@renderer/types'
-import { cn } from '@renderer/utils'
+import { cn, isEmoji } from '@renderer/utils'
 import type { ModalProps } from 'antd'
-import { Menu, Modal } from 'antd'
+import { Avatar, Menu, Modal } from 'antd'
 import type { ReactNode } from 'react'
 import React from 'react'
 import styled from 'styled-components'
@@ -95,7 +95,12 @@ export const AgentLabel = ({ agent, classNames, hideIcon }: AgentLabelProps) => 
 
   return (
     <div className={cn('flex w-full items-center gap-2 truncate', classNames?.container)}>
-      {!hideIcon && <EmojiIcon emoji={emoji || '⭐️'} className={classNames?.avatar} size={24} />}
+      {!hideIcon &&
+        (emoji && !isEmoji(emoji) ? (
+          <Avatar src={emoji} size={24} className={classNames?.avatar} style={{ borderRadius: '20%' }} />
+        ) : (
+          <EmojiIcon emoji={emoji || '⭐️'} className={classNames?.avatar} size={24} />
+        ))}
       <span className={cn('truncate', 'text-(--color-text)', classNames?.name)}>
         {agent?.name ?? (agent?.type ? getAgentTypeLabel(agent.type) : '')}
       </span>

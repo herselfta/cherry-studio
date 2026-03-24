@@ -38,6 +38,7 @@ export type Assistant = {
   topics: Topic[]
   type: string
   emoji?: string
+  avatar?: string
   description?: string
   model?: Model
   defaultModel?: Model

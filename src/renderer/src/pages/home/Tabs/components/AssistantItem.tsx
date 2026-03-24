@@ -7,7 +7,7 @@ import { useTags } from '@renderer/hooks/useTags'
 import AssistantSettingsPopup from '@renderer/pages/settings/AssistantSettings'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import type { Assistant, AssistantsSortType } from '@renderer/types'
-import { cn, uuid } from '@renderer/utils'
+import { cn, isEmoji, uuid } from '@renderer/utils'
 import { hasTopicPendingRequests } from '@renderer/utils/queue'
 import type { MenuProps } from 'antd'
 import { Dropdown } from 'antd'
@@ -141,8 +141,15 @@ const AssistantItem: FC<AssistantItemProps> = ({
 
   const assistantName = useMemo(() => assistant.name || t('chat.default.name'), [assistant.name, t])
   const fullAssistantName = useMemo(
-    () => (assistant.emoji ? `${assistant.emoji} ${assistantName}` : assistantName),
-    [assistant.emoji, assistantName]
+    () =>
+      assistant.avatar && isEmoji(assistant.avatar)
+        ? `${assistant.avatar} ${assistantName}`
+        : assistant.avatar
+          ? assistantName
+          : assistant.emoji
+            ? `${assistant.emoji} ${assistantName}`
+            : assistantName,
+    [assistant.avatar, assistant.emoji, assistantName]
   )
 
   const handleMenuButtonClick = useCallback((e: React.MouseEvent) => {

@@ -1,4 +1,4 @@
-import { EmojiAvatarWithPicker } from '@renderer/components/Avatar/EmojiAvatarWithPicker'
+import AvatarPickerButton from '@renderer/components/Avatar/AvatarPickerButton'
 import type { AgentBaseWithId, UpdateAgentBaseForm, UpdateAgentFunctionUnion } from '@renderer/types'
 import { AgentConfigurationSchema, isAgentEntity, isAgentType } from '@renderer/types'
 import { Input } from 'antd'
@@ -24,10 +24,10 @@ export const NameSetting = ({ base, update }: NameSettingsProps) => {
   // Avatar logic
   const isAgent = isAgentEntity(base)
   const isDefault = isAgent ? isAgentType(base.configuration?.avatar) : false
-  const [emoji, setEmoji] = useState(isAgent && !isDefault ? (base.configuration?.avatar ?? '⭐️') : '⭐️')
+  const [avatar, setAvatar] = useState(isAgent && !isDefault ? (base.configuration?.avatar ?? '') : '')
 
   const updateAvatar = useCallback(
-    (avatar: string) => {
+    (avatar?: string) => {
       if (!isAgent || !base) return
       const parsedConfiguration = AgentConfigurationSchema.parse(base.configuration ?? {})
       const payload = {
@@ -49,12 +49,21 @@ export const NameSetting = ({ base, update }: NameSettingsProps) => {
       {isAgent && (
         <SettingsItem inline>
           <SettingsTitle>{t('common.avatar')}</SettingsTitle>
-          <EmojiAvatarWithPicker
-            emoji={emoji}
-            onPick={(emoji: string) => {
-              setEmoji(emoji)
-              if (isAgent && emoji === base?.configuration?.avatar) return
-              updateAvatar(emoji)
+          <AvatarPickerButton
+            value={avatar}
+            fallbackEmoji="⭐️"
+            onEmojiPick={(nextAvatar: string) => {
+              setAvatar(nextAvatar)
+              if (isAgent && nextAvatar === base?.configuration?.avatar) return
+              updateAvatar(nextAvatar)
+            }}
+            onImagePick={(nextAvatar) => {
+              setAvatar(nextAvatar)
+              updateAvatar(nextAvatar)
+            }}
+            onReset={() => {
+              setAvatar('')
+              updateAvatar(undefined)
             }}
           />
         </SettingsItem>

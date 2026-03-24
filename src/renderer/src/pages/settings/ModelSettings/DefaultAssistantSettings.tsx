@@ -1,5 +1,5 @@
-import { CloseCircleFilled, QuestionCircleOutlined } from '@ant-design/icons'
-import EmojiPicker from '@renderer/components/EmojiPicker'
+import { QuestionCircleOutlined } from '@ant-design/icons'
+import AvatarPickerButton from '@renderer/components/Avatar/AvatarPickerButton'
 import { ResetIcon } from '@renderer/components/Icons'
 import { HStack } from '@renderer/components/Layout'
 import Selector from '@renderer/components/Selector'
@@ -10,7 +10,7 @@ import { useDefaultAssistant } from '@renderer/hooks/useAssistant'
 import { DEFAULT_ASSISTANT_SETTINGS } from '@renderer/services/AssistantService'
 import type { AssistantSettings as AssistantSettingsType } from '@renderer/types'
 import { getLeadingEmoji, modalConfirm } from '@renderer/utils'
-import { Button, Col, Divider, Flex, Input, InputNumber, Modal, Popover, Row, Slider, Switch, Tooltip } from 'antd'
+import { Button, Col, Divider, Flex, Input, InputNumber, Modal, Row, Slider, Switch, Tooltip } from 'antd'
 import TextArea from 'antd/es/input/TextArea'
 import type { Dispatch, FC, SetStateAction } from 'react'
 import { useState } from 'react'
@@ -32,6 +32,7 @@ const AssistantSettings: FC = () => {
     defaultAssistant.settings?.toolUseMode ?? 'function'
   )
   const [emoji, setEmoji] = useState(defaultAssistant.emoji || getLeadingEmoji(defaultAssistant.name) || '')
+  const [avatar, setAvatar] = useState(defaultAssistant.avatar)
   const [name, setName] = useState(
     defaultAssistant.name.replace(getLeadingEmoji(defaultAssistant.name) || '', '').trim()
   )
@@ -88,18 +89,24 @@ const AssistantSettings: FC = () => {
 
   const handleEmojiSelect = (selectedEmoji: string) => {
     setEmoji(selectedEmoji)
-    updateDefaultAssistant({ ...defaultAssistant, emoji: selectedEmoji, name })
+    setAvatar('')
+    updateDefaultAssistant({ ...defaultAssistant, emoji: selectedEmoji, avatar: '', name })
   }
 
-  const handleEmojiDelete = () => {
-    setEmoji('')
-    updateDefaultAssistant({ ...defaultAssistant, emoji: '', name })
+  const handleAvatarImageSelect = (selectedAvatar: string) => {
+    setAvatar(selectedAvatar)
+    updateDefaultAssistant({ ...defaultAssistant, avatar: selectedAvatar, emoji, name })
+  }
+
+  const handleAvatarReset = () => {
+    setAvatar('')
+    updateDefaultAssistant({ ...defaultAssistant, avatar: '', emoji, name })
   }
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newName = e.target.value
     setName(newName)
-    updateDefaultAssistant({ ...defaultAssistant, name: newName })
+    updateDefaultAssistant({ ...defaultAssistant, name: newName, avatar, emoji })
   }
 
   return (
@@ -107,29 +114,14 @@ const AssistantSettings: FC = () => {
       style={{ height: 'auto', background: 'transparent', padding: `0 0 12px 0`, gap: 10 }}
       theme={theme}>
       <HStack gap={8} alignItems="center" mt={10}>
-        <Popover content={<EmojiPicker onEmojiClick={handleEmojiSelect} />} arrow trigger="click">
-          <EmojiButtonWrapper>
-            <Button style={{ fontSize: 20, padding: '4px', minWidth: '30px', height: '30px' }}>{emoji}</Button>
-            {emoji && (
-              <CloseCircleFilled
-                className="delete-icon"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleEmojiDelete()
-                }}
-                style={{
-                  display: 'none',
-                  position: 'absolute',
-                  top: '-8px',
-                  right: '-8px',
-                  fontSize: '16px',
-                  color: '#ff4d4f',
-                  cursor: 'pointer'
-                }}
-              />
-            )}
-          </EmojiButtonWrapper>
-        </Popover>
+        <AvatarPickerButton
+          value={avatar}
+          fallbackEmoji={emoji || '⭐️'}
+          size={30}
+          onEmojiPick={handleEmojiSelect}
+          onImagePick={handleAvatarImageSelect}
+          onReset={avatar ? handleAvatarReset : undefined}
+        />
         <Input
           placeholder={t('common.assistant') + t('common.name')}
           value={name}
@@ -387,15 +379,6 @@ export default class DefaultAssistantSettingsPopup {
     })
   }
 }
-
-const EmojiButtonWrapper = styled.div`
-  position: relative;
-  display: inline-block;
-
-  &:hover .delete-icon {
-    display: block !important;
-  }
-`
 
 const Label = styled.p`
   margin: 0;

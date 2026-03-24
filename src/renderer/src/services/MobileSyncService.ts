@@ -5,10 +5,7 @@ import store, { persistor } from '@renderer/store'
 import type { Assistant, MCPServer, Provider, Topic, WebDavConfig, WebSearchProvider } from '@renderer/types'
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
 
-import {
-  BACKUP_AWARE_LOCAL_STORAGE_KEYS,
-  PERSISTED_REDUX_STATE_STORAGE_KEY
-} from './BackupLocalStorage'
+import { BACKUP_AWARE_LOCAL_STORAGE_KEYS, PERSISTED_REDUX_STATE_STORAGE_KEY } from './BackupLocalStorage'
 
 const logger = loggerService.withContext('MobileSyncService')
 
@@ -77,6 +74,7 @@ function sanitizeAssistantForSync(assistant: Assistant): Assistant {
     prompt: assistant.prompt,
     type: assistant.type,
     emoji: assistant.emoji,
+    avatar: assistant.avatar,
     description: assistant.description,
     model: assistant.model,
     defaultModel: assistant.defaultModel,
@@ -247,7 +245,10 @@ function buildLocalBackupPath(localBackupDir: string, fileName: string) {
 }
 
 export async function buildMobileSyncFileName() {
-  const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[-:T.Z]/g, '')
+    .slice(0, 14)
   const [hostname, deviceType] = await Promise.all([
     window.api.system.getHostname().catch(() => 'desktop'),
     window.api.system.getDeviceType().catch(() => 'desktop')
@@ -465,7 +466,10 @@ export async function importMobileSyncPayload(payload: string) {
         .filter((message) => message.topicId === topic.id)
         .map(toDesktopMessage)
       const mergedMessages = sortMessages(
-        mergeById<Message>(existing?.messages || [], incomingMessages.map((message) => ({ ...message })))
+        mergeById<Message>(
+          existing?.messages || [],
+          incomingMessages.map((message) => ({ ...message }))
+        )
       )
 
       await db.table('topics').put({

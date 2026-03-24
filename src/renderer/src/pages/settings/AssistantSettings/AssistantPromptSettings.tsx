@@ -1,8 +1,7 @@
 import 'emoji-picker-element'
 
-import { CloseCircleFilled } from '@ant-design/icons'
+import AvatarPickerButton from '@renderer/components/Avatar/AvatarPickerButton'
 import CodeEditor from '@renderer/components/CodeEditor'
-import EmojiPicker from '@renderer/components/EmojiPicker'
 import { Box, HSpaceBetweenStack, HStack } from '@renderer/components/Layout'
 import type { RichEditorRef } from '@renderer/components/RichEditor/types'
 import { usePromptProcessor } from '@renderer/hooks/usePromptProcessor'
@@ -27,6 +26,7 @@ interface Props {
 
 const AssistantPromptSettings: React.FC<Props> = ({ assistant, updateAssistant }) => {
   const [emoji, setEmoji] = useState(getLeadingEmoji(assistant.name) || assistant.emoji)
+  const [avatar, setAvatar] = useState(assistant.avatar)
   const [name, setName] = useState(assistant.name.replace(getLeadingEmoji(assistant.name) || '', '').trim())
   const [prompt, setPrompt] = useState(assistant.prompt)
   const [showPreview, setShowPreview] = useState(assistant.prompt.length > 0)
@@ -44,20 +44,27 @@ const AssistantPromptSettings: React.FC<Props> = ({ assistant, updateAssistant }
   })
 
   const onUpdate = () => {
-    const _assistant = { ...assistant, name: name.trim(), emoji, prompt }
+    const _assistant = { ...assistant, name: name.trim(), emoji, avatar, prompt }
     updateAssistant(_assistant)
     window.toast.success(t('common.saved'))
   }
 
   const handleEmojiSelect = (selectedEmoji: string) => {
     setEmoji(selectedEmoji)
-    const _assistant = { ...assistant, name: name.trim(), emoji: selectedEmoji, prompt }
+    setAvatar('')
+    const _assistant = { ...assistant, name: name.trim(), emoji: selectedEmoji, avatar: '', prompt }
     updateAssistant(_assistant)
   }
 
-  const handleEmojiDelete = () => {
-    setEmoji('')
-    const _assistant = { ...assistant, name: name.trim(), prompt, emoji: '' }
+  const handleAvatarImageSelect = (selectedAvatar: string) => {
+    setAvatar(selectedAvatar)
+    const _assistant = { ...assistant, name: name.trim(), prompt, emoji, avatar: selectedAvatar }
+    updateAssistant(_assistant)
+  }
+
+  const handleAvatarReset = () => {
+    setAvatar('')
+    const _assistant = { ...assistant, name: name.trim(), prompt, emoji, avatar: '' }
     updateAssistant(_assistant)
   }
 
@@ -69,37 +76,13 @@ const AssistantPromptSettings: React.FC<Props> = ({ assistant, updateAssistant }
         {t('common.name')}
       </Box>
       <HStack gap={8} alignItems="center">
-        <Popover content={<EmojiPicker onEmojiClick={handleEmojiSelect} />} arrow trigger="click">
-          <EmojiButtonWrapper>
-            <Button
-              style={{
-                fontSize: 18,
-                padding: '4px',
-                minWidth: '28px',
-                height: '28px'
-              }}>
-              {emoji}
-            </Button>
-            {emoji && (
-              <CloseCircleFilled
-                className="delete-icon"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleEmojiDelete()
-                }}
-                style={{
-                  display: 'none',
-                  position: 'absolute',
-                  top: '-8px',
-                  right: '-8px',
-                  fontSize: '16px',
-                  color: '#ff4d4f',
-                  cursor: 'pointer'
-                }}
-              />
-            )}
-          </EmojiButtonWrapper>
-        </Popover>
+        <AvatarPickerButton
+          value={avatar}
+          fallbackEmoji={emoji || '⭐️'}
+          onEmojiPick={handleEmojiSelect}
+          onImagePick={handleAvatarImageSelect}
+          onReset={avatar ? handleAvatarReset : undefined}
+        />
         <Input
           placeholder={t('common.assistant') + t('common.name')}
           value={name}
@@ -170,15 +153,6 @@ const Container = styled.div`
   flex: 1;
   flex-direction: column;
   overflow: hidden;
-`
-
-const EmojiButtonWrapper = styled.div`
-  position: relative;
-  display: inline-block;
-
-  &:hover .delete-icon {
-    display: block !important;
-  }
 `
 
 const TextAreaContainer = styled.div`
