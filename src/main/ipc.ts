@@ -4,7 +4,7 @@ import path from 'node:path'
 
 import type { TokenUsageData } from '@cherrystudio/analytics-client'
 import { loggerService } from '@logger'
-import { isLinux, isMac, isPortable, isWin } from '@main/constant'
+import { isDev, isLinux, isMac, isPortable, isWin } from '@main/constant'
 import { generateSignature } from '@main/integration/cherryai'
 import anthropicService from '@main/services/AnthropicService'
 import { getIpCountry } from '@main/utils/ipService'
@@ -502,6 +502,25 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     if (preventQuitListener) {
       app.removeListener('before-quit', preventQuitListener)
       preventQuitListener = null
+    }
+
+    if (isDev) {
+      // In dev mode, app.relaunch() re-spawns a bare Electron process that cannot
+      // reach the Vite dev server (already closed by app.quit()), producing a
+      // white-screen zombie that holds the single-instance lock and blocks the
+      // next `pnpm dev`.
+      // Instead: close DB connections, apply any .restore directory swaps that
+      // normally happen at next startup, then reload all renderer windows.
+      logger.info('[Dev] Backup restore: closing connections, applying .restore swap, reloading windows')
+      const { closeAllDataConnections } = await import('./utils/lifecycle')
+      await closeAllDataConnections()
+      await BackupManager.handleStartupRestore()
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) {
+          win.webContents.reloadIgnoringCache()
+        }
+      })
+      return
     }
 
     await relaunchAppGracefully(app, options)
