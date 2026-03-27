@@ -8,6 +8,11 @@ import {
   restoreBackupLocalStorageSnapshot
 } from '../BackupLocalStorage'
 
+function parsePersistedSettingsSnapshot() {
+  const persistedState = JSON.parse(localStorage.getItem(PERSISTED_REDUX_STATE_STORAGE_KEY) || '{}')
+  return JSON.parse(persistedState.settings || '{}')
+}
+
 describe('BackupLocalStorage', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -114,6 +119,48 @@ describe('BackupLocalStorage', () => {
       }
     })
     expect(localStorage.getItem('language')).toBe('zh-CN')
+  })
+
+  it('strips local-only backup settings from exported persisted redux state', () => {
+    localStorage.setItem(
+      PERSISTED_REDUX_STATE_STORAGE_KEY,
+      JSON.stringify({
+        settings: JSON.stringify({
+          theme: 'dark',
+          localBackupDir: '/Users/mac/Backups',
+          localBackupAutoSync: true,
+          localBackupSyncInterval: 60,
+          localBackupMaxBackups: 3,
+          localBackupSkipBackupFile: true
+        })
+      })
+    )
+
+    const snapshot = createBackupLocalStorageSnapshot()
+    const persistedState = JSON.parse(snapshot[PERSISTED_REDUX_STATE_STORAGE_KEY] || '{}')
+
+    expect(JSON.parse(persistedState.settings || '{}')).toEqual({
+      theme: 'dark'
+    })
+  })
+
+  it('drops local-only backup settings when restoring persisted redux state from backup snapshots', () => {
+    restoreBackupLocalStorageSnapshot({
+      [PERSISTED_REDUX_STATE_STORAGE_KEY]: JSON.stringify({
+        settings: JSON.stringify({
+          theme: 'light',
+          localBackupDir: '/Volumes/portable-backups',
+          localBackupAutoSync: true,
+          localBackupSyncInterval: 30,
+          localBackupMaxBackups: 5,
+          localBackupSkipBackupFile: false
+        })
+      })
+    })
+
+    expect(parsePersistedSettingsSnapshot()).toEqual({
+      theme: 'light'
+    })
   })
 
   it('only restores confirm-before-restore from legacy manual schedule backups', () => {

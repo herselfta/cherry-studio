@@ -5,6 +5,13 @@ export const BACKUP_MANUAL_SYNC_CONFIRM_PREFERENCES_KEY = 'cherry-studio:backup:
 
 const MANUAL_SYNC_PROVIDERS = ['webdav', 's3', 'local', 'nutstore'] as const
 const DEFAULT_CONFIRM_BEFORE_RESTORE = true
+const NON_PORTABLE_PERSISTED_SETTINGS_KEYS = [
+  'localBackupDir',
+  'localBackupAutoSync',
+  'localBackupSyncInterval',
+  'localBackupMaxBackups',
+  'localBackupSkipBackupFile'
+] as const
 
 // Keep this list aligned with cross-device localStorage-backed settings.
 // When a new feature stores portable settings outside Redux/IndexedDB, add it here.
@@ -109,6 +116,44 @@ function readSerializedJson(value: string | null): unknown {
   }
 }
 
+function sanitizePersistedReduxState(value: string): string {
+  const persistedReduxState = readSerializedJson(value)
+  if (!persistedReduxState || typeof persistedReduxState !== 'object') {
+    return value
+  }
+
+  const serializedSettings = (persistedReduxState as Record<string, unknown>).settings
+  if (typeof serializedSettings !== 'string') {
+    return value
+  }
+
+  const settingsState = readSerializedJson(serializedSettings)
+  if (!settingsState || typeof settingsState !== 'object') {
+    return value
+  }
+
+  const sanitizedSettingsState = { ...(settingsState as Record<string, unknown>) }
+  let hasRemovedLocalOnlySettings = false
+
+  for (const key of NON_PORTABLE_PERSISTED_SETTINGS_KEYS) {
+    if (!(key in sanitizedSettingsState)) {
+      continue
+    }
+
+    delete sanitizedSettingsState[key]
+    hasRemovedLocalOnlySettings = true
+  }
+
+  if (!hasRemovedLocalOnlySettings) {
+    return value
+  }
+
+  return JSON.stringify({
+    ...(persistedReduxState as Record<string, unknown>),
+    settings: JSON.stringify(sanitizedSettingsState)
+  })
+}
+
 function getManualSyncConfirmPreferences(storage: Storage): ManualSyncConfirmPreferences {
   const currentSchedules = parseManualSyncScheduleMap(
     readSerializedJson(storage.getItem(MANUAL_SYNC_SCHEDULE_STORAGE_KEY))
@@ -160,7 +205,10 @@ export function createBackupLocalStorageSnapshot(storage: Storage = localStorage
   const persistedReduxState = storage.getItem(PERSISTED_REDUX_STATE_STORAGE_KEY)
 
   if (persistedReduxState !== null) {
-    snapshot[PERSISTED_REDUX_STATE_STORAGE_KEY] = persistedReduxState
+    // Migration backups should not drag machine-local backup directory settings
+    // across devices. Keep the portable Redux snapshot, but strip local backup
+    // provider configuration so restore targets fall back to their own defaults.
+    snapshot[PERSISTED_REDUX_STATE_STORAGE_KEY] = sanitizePersistedReduxState(persistedReduxState)
   }
 
   snapshot[BACKUP_MANUAL_SYNC_CONFIRM_PREFERENCES_KEY] = JSON.stringify(getManualSyncConfirmPreferences(storage))
@@ -189,7 +237,7 @@ export function restoreBackupLocalStorageSnapshot(
   const persistedReduxState = snapshot[PERSISTED_REDUX_STATE_STORAGE_KEY]
 
   if (typeof persistedReduxState === 'string') {
-    storage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, persistedReduxState)
+    storage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, sanitizePersistedReduxState(persistedReduxState))
   }
 
   const manualSyncConfirmPreferences = getBackupManualSyncConfirmPreferences(snapshot)

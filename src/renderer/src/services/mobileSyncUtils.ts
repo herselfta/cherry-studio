@@ -74,7 +74,8 @@ function createFallbackAssistant(assistantId: string, topics: Topic[]): Assistan
 export function normalizeDesktopSyncTopics(
   topLevelTopics: Topic[],
   embeddedAssistantTopics: Topic[],
-  messages: Message[]
+  messages: Message[],
+  visibleAssistantIds?: Set<string>
 ): NormalizeDesktopSyncTopicsResult {
   // Mobile sync persists conversation content in two places:
   // 1. top-level topics/messages/messageBlocks
@@ -98,6 +99,26 @@ export function normalizeDesktopSyncTopics(
     result.set(message.topicId, [...existing, message])
     return result
   }, new Map())
+
+  for (const [topicId, topic] of normalizedTopics.entries()) {
+    if (!visibleAssistantIds || visibleAssistantIds.has(topic.assistantId)) {
+      continue
+    }
+
+    const inferredAssistantId = messagesByTopicId
+      .get(topicId)
+      ?.map((message) => message.assistantId)
+      .find((assistantId) => visibleAssistantIds.has(assistantId))
+
+    if (!inferredAssistantId) {
+      continue
+    }
+
+    normalizedTopics.set(topicId, {
+      ...topic,
+      assistantId: inferredAssistantId
+    })
+  }
 
   let synthesizedTopicCount = 0
   for (const [topicId, topicMessages] of messagesByTopicId.entries()) {
@@ -145,8 +166,7 @@ export function buildDesktopSyncAssistantState({
 
   const allAssistantIds = new Set<string>([
     ...currentAssistants.map((assistant) => assistant.id),
-    ...incomingAssistants.map((assistant) => assistant.id),
-    ...Array.from(topicsByAssistantId.keys())
+    ...incomingAssistants.map((assistant) => assistant.id)
   ])
   allAssistantIds.delete('default')
 

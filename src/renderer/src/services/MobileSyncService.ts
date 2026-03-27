@@ -406,6 +406,12 @@ export async function importMobileSyncPayload(payload: string) {
   const currentSettings = readPersistedSlice(persistedState, 'settings', store.getState().settings)
   const currentMcp = readPersistedSlice(persistedState, 'mcp', store.getState().mcp)
   const incomingMessages = parsed.data.messages.map(toDesktopMessage)
+  const visibleAssistantIds = new Set<string>([
+    currentAssistants.defaultAssistant.id,
+    parsed.data.assistants.defaultAssistant.id,
+    ...currentAssistants.assistants.map((assistant) => assistant.id),
+    ...parsed.data.assistants.assistants.map((assistant) => assistant.id)
+  ])
   const embeddedTopics = [
     ...toDesktopTopics(parsed.data.assistants.defaultAssistant.topics),
     ...parsed.data.assistants.assistants.flatMap((assistant) => toDesktopTopics(assistant.topics))
@@ -413,7 +419,8 @@ export async function importMobileSyncPayload(payload: string) {
   const { synthesizedTopicCount, topics: normalizedTopics } = normalizeDesktopSyncTopics(
     toDesktopTopics(parsed.data.topics),
     embeddedTopics,
-    incomingMessages
+    incomingMessages,
+    visibleAssistantIds
   )
   const { droppedBlockCount, messageBlocks: normalizedMessageBlocks } = filterDesktopSyncMessageBlocks(
     parsed.data.messageBlocks.map(toDesktopMessageBlock),

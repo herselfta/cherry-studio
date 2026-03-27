@@ -61,10 +61,17 @@ describe('mobileSyncUtils', () => {
       [
         createTopic({ id: 'mobile-default-topic', assistantId: 'default' }),
         createTopic({ id: 'mobile-external-topic', assistantId: 'external-1' }),
-        createTopic({ id: 'mobile-orphan-topic', assistantId: 'quick' })
+        createTopic({ id: 'mobile-external-topic-2', assistantId: 'quick' })
       ],
       [],
-      []
+      [
+        createMessage({
+          id: 'message-quick-1',
+          assistantId: 'external-1',
+          topicId: 'mobile-external-topic-2'
+        })
+      ],
+      new Set(['default', 'external-1'])
     )
 
     const result = buildDesktopSyncAssistantState({
@@ -98,12 +105,10 @@ describe('mobileSyncUtils', () => {
         avatar: 'image://mobile-avatar'
       })
     )
-    expect(result.assistants.find((assistant) => assistant.id === 'quick')).toEqual(
-      expect.objectContaining({
-        id: 'quick',
-        topics: [expect.objectContaining({ id: 'mobile-orphan-topic', assistantId: 'quick' })]
-      })
-    )
+    expect(
+      result.assistants.find((assistant) => assistant.id === 'external-1')?.topics.map((topic) => topic.id)
+    ).toEqual(expect.arrayContaining(['mobile-external-topic-2']))
+    expect(result.assistants.find((assistant) => assistant.id === 'quick')).toBeUndefined()
   })
 
   it('synthesizes missing topics from message ownership so mobile imports do not silently lose them', () => {
