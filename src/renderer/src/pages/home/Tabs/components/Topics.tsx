@@ -39,6 +39,7 @@ import type { ItemType, MenuItemType } from 'antd/es/menu/interface'
 import dayjs from 'dayjs'
 import { findIndex } from 'lodash'
 import {
+  ArrowDownUp,
   BrushCleaning,
   CheckSquare,
   FolderOpen,
@@ -61,6 +62,63 @@ import { useDispatch, useSelector } from 'react-redux'
 import styled from 'styled-components'
 
 import { TopicManagePanel, useTopicManageMode } from './TopicManageMode'
+
+type TopicSortMode = 'manual' | 'updatedAt' | 'createdAt'
+
+const TOPIC_SORT_MODE_STORAGE_KEY = 'cherry-studio.topic-sort-mode'
+
+function getTopicSortTimestamp(topic: Topic, sortMode: Exclude<TopicSortMode, 'manual'>) {
+  return new Date(topic[sortMode]).getTime()
+}
+
+function sortTopicGroup(topics: Topic[], sortMode: TopicSortMode) {
+  if (sortMode === 'manual') {
+    return topics
+  }
+
+  return [...topics].sort((left, right) => {
+    const timestampDiff = getTopicSortTimestamp(right, sortMode) - getTopicSortTimestamp(left, sortMode)
+    if (timestampDiff !== 0) {
+      return timestampDiff
+    }
+
+    const updatedDiff = new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+    if (updatedDiff !== 0) {
+      return updatedDiff
+    }
+
+    const createdDiff = new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+    if (createdDiff !== 0) {
+      return createdDiff
+    }
+
+    return left.name.localeCompare(right.name)
+  })
+}
+
+function sortTopicsForSidebar(topics: Topic[], sortMode: TopicSortMode, pinTopicsToTop: boolean) {
+  if (!pinTopicsToTop) {
+    return sortTopicGroup(topics, sortMode)
+  }
+
+  const pinnedTopics = topics.filter((topic) => topic.pinned)
+  const unpinnedTopics = topics.filter((topic) => !topic.pinned)
+
+  return [...sortTopicGroup(pinnedTopics, sortMode), ...sortTopicGroup(unpinnedTopics, sortMode)]
+}
+
+function readTopicSortMode(): TopicSortMode {
+  const storedMode = localStorage.getItem(TOPIC_SORT_MODE_STORAGE_KEY)
+
+  if (storedMode === 'manual' || storedMode === 'updatedAt' || storedMode === 'createdAt') {
+    return storedMode
+  }
+
+  // Default to updated time so freshly imported mobile topics land near the top instead
+  // of silently sinking to the bottom just because the raw assistant.topic array order
+  // happened to append them last during cross-device restore.
+  return 'updatedAt'
+}
 
 interface Props {
   assistant: Assistant
@@ -87,6 +145,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
   const deleteTimerRef = useRef<NodeJS.Timeout>(null)
   const [editingTopicId, setEditingTopicId] = useState<string | null>(null)
   const listRef = useRef<DraggableVirtualListRef>(null)
+  const [topicSortMode, setTopicSortModeState] = useState<TopicSortMode>(() => readTopicSortMode())
 
   // 管理模式状态
   const manageState = useTopicManageMode()
@@ -241,6 +300,11 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
     },
     [setActiveTopic]
   )
+
+  const setTopicSortMode = useCallback((sortMode: TopicSortMode) => {
+    setTopicSortModeState(sortMode)
+    localStorage.setItem(TOPIC_SORT_MODE_STORAGE_KEY, sortMode)
+  }, [])
 
   const exportMenuOptions = useSelector((state: RootState) => state.settings.exportMenuOptions)
 
@@ -529,17 +593,9 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
     onDeleteTopic
   ])
 
-  // Sort topics based on pinned status if pinTopicsToTop is enabled
   const sortedTopics = useMemo(() => {
-    if (pinTopicsToTop) {
-      return [...assistant.topics].sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1
-        if (!a.pinned && b.pinned) return 1
-        return 0
-      })
-    }
-    return assistant.topics
-  }, [assistant.topics, pinTopicsToTop])
+    return sortTopicsForSidebar(assistant.topics, topicSortMode, pinTopicsToTop)
+  }, [assistant.topics, pinTopicsToTop, topicSortMode])
 
   // Filter topics based on search text (only in manage mode)
   // Supports: case-insensitive, space-separated keywords (all must match)
@@ -564,6 +620,27 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
   }, [sortedTopics, deferredSearchText, isManageMode])
 
   const singlealone = topicPosition === 'right' && position === 'right'
+  const topicTimeField = topicSortMode === 'updatedAt' ? 'updatedAt' : 'createdAt'
+  const topicSortMenuItems: MenuProps['items'] = useMemo(
+    () => [
+      {
+        key: 'updatedAt',
+        label: t('chat.topics.sort.updated_at'),
+        onClick: () => setTopicSortMode('updatedAt')
+      },
+      {
+        key: 'createdAt',
+        label: t('chat.topics.sort.created_at'),
+        onClick: () => setTopicSortMode('createdAt')
+      },
+      {
+        key: 'manual',
+        label: t('chat.topics.sort.manual'),
+        onClick: () => setTopicSortMode('manual')
+      }
+    ],
+    [setTopicSortMode, t]
+  )
 
   return (
     <>
@@ -571,6 +648,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
         ref={listRef}
         className="topics-tab"
         list={filteredTopics}
+        itemKey={(index) => filteredTopics[index].id}
         onUpdate={updateTopics}
         style={{ height: '100%', padding: '8px 0 10px 10px', paddingBottom: isManageMode ? 70 : 10 }}
         itemContainerStyle={{ paddingBottom: '8px' }}
@@ -579,6 +657,15 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
             <AddButton onClick={() => EventEmitter.emit(EVENT_NAMES.ADD_NEW_TOPIC)}>
               {t('chat.add.topic.title')}
             </AddButton>
+            <HeaderActions>
+              <Dropdown menu={{ items: topicSortMenuItems }} trigger={['click']}>
+                <Tooltip title={t('chat.topics.sort.title')} mouseEnterDelay={0.5}>
+                  <HeaderIconButton className={topicSortMode !== 'manual' ? 'active' : ''}>
+                    <ArrowDownUp size={14} />
+                  </HeaderIconButton>
+                </Tooltip>
+              </Dropdown>
+            </HeaderActions>
             <Tooltip title={t('chat.topics.manage.title')} mouseEnterDelay={0.5}>
               <HeaderIconButton
                 onClick={isManageMode ? exitManageMode : enterManageMode}
@@ -588,7 +675,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
             </Tooltip>
           </HeaderRow>
         }
-        disabled={isManageMode}>
+        disabled={isManageMode || topicSortMode !== 'manual'}>
         {(topic) => {
           const isActive = topic.id === activeTopic?.id
           const topicName = topic.name.replace('`', '')
@@ -703,7 +790,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
                   </TopicPromptText>
                 )}
                 {showTopicTime && (
-                  <TopicTime className="time">{dayjs(topic.createdAt).format('YYYY/MM/DD HH:mm')}</TopicTime>
+                  <TopicTime className="time">{dayjs(topic[topicTimeField]).format('YYYY/MM/DD HH:mm')}</TopicTime>
                 )}
               </TopicListItem>
             </Dropdown>
@@ -779,6 +866,12 @@ const TopicListItem = styled.div`
   &.disabled {
     opacity: 0.5;
   }
+`
+
+const HeaderActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
 `
 
 const TopicNameContainer = styled.div`

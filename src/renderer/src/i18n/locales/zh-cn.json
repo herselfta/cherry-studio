@@ -1188,6 +1188,12 @@
         "yuque": "导出到语雀"
       },
       "list": "话题列表",
+      "sort": {
+        "created_at": "按创建时间排序",
+        "manual": "按当前顺序",
+        "title": "话题排序",
+        "updated_at": "按更新时间排序"
+      },
       "manage": {
         "clear_selection": "取消选择",
         "delete": {

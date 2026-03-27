@@ -1188,6 +1188,12 @@
         "yuque": "Export to Yuque"
       },
       "list": "Topic List",
+      "sort": {
+        "created_at": "Sort by creation time",
+        "manual": "Keep current order",
+        "title": "Topic Sort",
+        "updated_at": "Sort by update time"
+      },
       "manage": {
         "clear_selection": "Clear Selection",
         "delete": {

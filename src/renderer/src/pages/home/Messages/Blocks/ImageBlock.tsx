@@ -18,9 +18,11 @@ const ImageBlock: React.FC<Props> = ({ block, isSingle = false }) => {
   if (block.status === MessageBlockStatus.STREAMING || block.status === MessageBlockStatus.SUCCESS) {
     const images = block.metadata?.generateImageResponse?.images?.length
       ? block.metadata?.generateImageResponse?.images
-      : block?.file
-        ? [`file://${FileManager.getFilePath(block?.file)}`]
-        : []
+      : block.url
+        ? [block.url]
+        : block?.file
+          ? [`file://${FileManager.getFilePath(block?.file)}`]
+          : []
 
     return (
       <Container>

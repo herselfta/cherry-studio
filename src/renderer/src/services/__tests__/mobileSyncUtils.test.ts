@@ -1,8 +1,18 @@
 import type { Assistant, Topic } from '@renderer/types'
-import { AssistantMessageStatus, type Message } from '@renderer/types/newMessage'
+import {
+  AssistantMessageStatus,
+  MessageBlockStatus,
+  MessageBlockType,
+  type Message,
+  type MessageBlock,
+} from '@renderer/types/newMessage'
 import { describe, expect, it } from 'vitest'
 
-import { buildDesktopSyncAssistantState, normalizeDesktopSyncTopics } from '../mobileSyncUtils'
+import {
+  applyPortableSyncImageAssets,
+  buildDesktopSyncAssistantState,
+  normalizeDesktopSyncTopics
+} from '../mobileSyncUtils'
 
 function createTopic(overrides: Partial<Topic> & Pick<Topic, 'id' | 'assistantId'>): Topic {
   return {
@@ -39,6 +49,28 @@ function createMessage(overrides: Partial<Message> & Pick<Message, 'id' | 'assis
     assistantId: overrides.assistantId,
     topicId: overrides.topicId
   }
+}
+
+function createImageBlock(overrides: Partial<MessageBlock> & Pick<MessageBlock, 'id' | 'messageId'>): MessageBlock {
+  return {
+    type: MessageBlockType.IMAGE,
+    createdAt: '2026-03-24T00:00:00.000Z',
+    status: MessageBlockStatus.SUCCESS,
+    file: {
+      id: 'image-file-1',
+      name: 'image-file-1',
+      origin_name: 'image-file-1.png',
+      path: '/tmp/image-file-1.png',
+      ext: '.png',
+      type: 'image',
+      size: 1,
+      created_at: '2026-03-24T00:00:00.000Z',
+      count: 1
+    },
+    ...overrides,
+    id: overrides.id,
+    messageId: overrides.messageId
+  } as MessageBlock
 }
 
 describe('mobileSyncUtils', () => {
@@ -175,6 +207,29 @@ describe('mobileSyncUtils', () => {
       expect.objectContaining({
         name: 'Mobile Default',
         avatar: 'data:image/png;base64,mobile-default-avatar'
+      })
+    )
+  })
+
+  it('injects portable mobile image assets into imported image blocks', () => {
+    const result = applyPortableSyncImageAssets(
+      [
+        createImageBlock({
+          id: 'block-1',
+          messageId: 'message-1'
+        })
+      ],
+      [
+        {
+          fileId: 'image-file-1',
+          data: 'data:image/png;base64,desktop-mobile-image'
+        }
+      ]
+    )
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        url: 'data:image/png;base64,desktop-mobile-image'
       })
     )
   })

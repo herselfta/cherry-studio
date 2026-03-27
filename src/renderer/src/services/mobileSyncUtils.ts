@@ -1,5 +1,5 @@
 import type { Assistant, Topic } from '@renderer/types'
-import type { Message, MessageBlock } from '@renderer/types/newMessage'
+import { MessageBlockType, type Message, type MessageBlock } from '@renderer/types/newMessage'
 
 type AssistantLike = Pick<Assistant, 'id' | 'name' | 'prompt' | 'type' | 'topics'> & Partial<Assistant>
 
@@ -19,6 +19,14 @@ type NormalizeDesktopSyncTopicsResult = {
 type FilterSyncMessageBlocksResult = {
   droppedBlockCount: number
   messageBlocks: MessageBlock[]
+}
+
+export type PortableSyncImageAsset = {
+  fileId: string
+  data: string
+  ext?: string
+  name?: string
+  origin_name?: string
 }
 
 function mergeById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
@@ -146,6 +154,33 @@ export function filterDesktopSyncMessageBlocks(
     droppedBlockCount: messageBlocks.length - filtered.length,
     messageBlocks: filtered
   }
+}
+
+export function applyPortableSyncImageAssets(
+  messageBlocks: MessageBlock[],
+  portableImageAssets: PortableSyncImageAsset[]
+) {
+  if (portableImageAssets.length === 0) {
+    return messageBlocks
+  }
+
+  const portableImageAssetMap = new Map(portableImageAssets.map((asset) => [asset.fileId, asset]))
+
+  return messageBlocks.map((block) => {
+    if (block.type !== MessageBlockType.IMAGE || !block.file?.id) {
+      return block
+    }
+
+    const portableImageAsset = portableImageAssetMap.get(block.file.id)
+    if (!portableImageAsset) {
+      return block
+    }
+
+    return {
+      ...block,
+      url: portableImageAsset.data
+    }
+  })
 }
 
 export function buildDesktopSyncAssistantState({

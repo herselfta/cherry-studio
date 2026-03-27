@@ -6,10 +6,13 @@ import type { Assistant, MCPServer, Provider, Topic, WebDavConfig, WebSearchProv
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
 
 import { BACKUP_AWARE_LOCAL_STORAGE_KEYS, PERSISTED_REDUX_STATE_STORAGE_KEY } from './BackupLocalStorage'
+import { buildPortableImageAssets, type PortableImageAsset } from './BackupService'
 import {
+  applyPortableSyncImageAssets,
   buildDesktopSyncAssistantState,
   filterDesktopSyncMessageBlocks,
-  normalizeDesktopSyncTopics
+  normalizeDesktopSyncTopics,
+  type PortableSyncImageAsset
 } from './mobileSyncUtils'
 
 const logger = loggerService.withContext('MobileSyncService')
@@ -44,6 +47,7 @@ type SyncData = {
   topics: SyncTopic[]
   messages: SyncMessage[]
   messageBlocks: SyncMessageBlock[]
+  portableImageAssets?: PortableSyncImageAsset[]
   localStorage: Partial<Record<(typeof BACKUP_AWARE_LOCAL_STORAGE_KEYS)[number], string>>
 }
 
@@ -262,6 +266,7 @@ export async function exportMobileSyncPayload(): Promise<string> {
   const currentState = store.getState()
   const topicRecords = await db.table('topics').toArray()
   const messageBlocks = (await db.table('message_blocks').toArray()) as MessageBlock[]
+  const files = await db.table('files').toArray()
   const avatarSetting = await db.table('settings').get('image://avatar')
   const topicMetadata = new Map(collectTopicMetadata(currentState).map((topic) => [topic.id, topic]))
 
@@ -286,6 +291,11 @@ export async function exportMobileSyncPayload(): Promise<string> {
       updatedAt: toTimestamp(topicMessages.at(-1)?.updatedAt || topicMessages.at(-1)?.createdAt)
     })
   }
+
+  const portableImageAssets = (await buildPortableImageAssets({
+    message_blocks: messageBlocks,
+    files
+  } as Record<string, any>)) as PortableImageAsset[]
 
   const payload: MobileSyncPayload = {
     schema: MOBILE_SYNC_SCHEMA,
@@ -316,6 +326,7 @@ export async function exportMobileSyncPayload(): Promise<string> {
       topics,
       messages,
       messageBlocks: messageBlocks.map(toSyncMessageBlock),
+      portableImageAssets,
       localStorage: readPortableLocalStorage()
     }
   }
@@ -426,6 +437,10 @@ export async function importMobileSyncPayload(payload: string) {
     parsed.data.messageBlocks.map(toDesktopMessageBlock),
     incomingMessages
   )
+  const portableMessageBlocks = applyPortableSyncImageAssets(
+    normalizedMessageBlocks,
+    parsed.data.portableImageAssets || []
+  )
   const { assistants: incomingAssistants, defaultAssistant: mergedDefaultAssistant } = buildDesktopSyncAssistantState({
     currentDefaultAssistant: currentAssistants.defaultAssistant,
     currentAssistants: currentAssistants.assistants,
@@ -494,8 +509,8 @@ export async function importMobileSyncPayload(payload: string) {
       })
     }
 
-    if (normalizedMessageBlocks.length > 0) {
-      await db.table('message_blocks').bulkPut(normalizedMessageBlocks)
+    if (portableMessageBlocks.length > 0) {
+      await db.table('message_blocks').bulkPut(portableMessageBlocks)
     }
 
     if (parsed.data.settings.avatar) {
