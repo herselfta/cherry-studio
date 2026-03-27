@@ -4,7 +4,8 @@ import { upgradeToV7, upgradeToV8 } from '@renderer/databases/upgrades'
 import i18n from '@renderer/i18n'
 import store from '@renderer/store'
 import { setLocalBackupSyncState, setS3SyncState, setWebDAVSyncState } from '@renderer/store/backup'
-import type { S3Config, WebDavConfig } from '@renderer/types'
+import type { FileMetadata, S3Config, WebDavConfig } from '@renderer/types'
+import { FILE_TYPE } from '@renderer/types'
 import { uuid } from '@renderer/utils'
 import dayjs from 'dayjs'
 
@@ -26,6 +27,15 @@ const logger = loggerService.withContext('BackupService')
 
 export const LEGACY_INTERNAL_BACKUP_FILE_NAME = LEGACY_PORTABLE_BACKUP_FILE_NAME
 export const MIGRATION_BACKUP_MARKER = PC_MIGRATION_BACKUP_MARKER
+
+export type PortableImageAsset = {
+  fileId: string
+  mime: string
+  data: string
+  ext: string
+  name: string
+  origin_name: string
+}
 
 export function isMigrationBackupFile(fileName: string) {
   // Migration backups intentionally keep using the legacy logical export format.
@@ -1024,12 +1034,73 @@ function isStreamingInProgress() {
   return Object.values(loadingByTopic).some((loading) => loading === true)
 }
 
+function isPortableImageFileMetadata(value: unknown): value is FileMetadata {
+  return !!value && typeof value === 'object' && 'id' in value && 'type' in value && 'ext' in value
+}
+
+async function readPortableImageAsset(file: FileMetadata): Promise<PortableImageAsset | null> {
+  try {
+    const { data, mime } = await window.api.file.base64Image(file.id + file.ext)
+
+    return {
+      fileId: file.id,
+      mime,
+      data,
+      ext: file.ext,
+      name: file.name,
+      origin_name: file.origin_name
+    }
+  } catch (error) {
+    logger.warn(
+      `Failed to inline portable image asset ${file.id} for migration backup. The backup will still succeed, but this image may remain desktop-only on mobile restore.`,
+      error as Error
+    )
+    return null
+  }
+}
+
+export async function buildPortableImageAssets(
+  indexedDB: Record<string, any>,
+  readPortableImage: (file: FileMetadata) => Promise<PortableImageAsset | null> = readPortableImageAsset
+) {
+  const imageBlocks = Array.isArray(indexedDB.message_blocks) ? indexedDB.message_blocks : []
+  const indexedFiles = Array.isArray(indexedDB.files) ? indexedDB.files : []
+  const indexedFileMap = new Map(
+    indexedFiles.filter(isPortableImageFileMetadata).map((file: FileMetadata) => [file.id, file])
+  )
+  const referencedImageFiles: FileMetadata[] = []
+  const seenFileIds = new Set<string>()
+
+  for (const block of imageBlocks) {
+    const blockFile = isPortableImageFileMetadata(block?.file) ? block.file : null
+
+    if (!blockFile || blockFile.type !== FILE_TYPE.IMAGE || seenFileIds.has(blockFile.id)) {
+      continue
+    }
+
+    const resolvedFile = indexedFileMap.get(blockFile.id) ?? blockFile
+    seenFileIds.add(resolvedFile.id)
+    referencedImageFiles.push(resolvedFile)
+  }
+
+  const portableImageAssets = await Promise.all(referencedImageFiles.map((file) => readPortableImage(file)))
+
+  return portableImageAssets.filter((asset): asset is PortableImageAsset => asset !== null)
+}
+
 export async function getBackupData() {
+  const indexedDB = await backupDatabase()
+  const portableImageAssets = await buildPortableImageAssets(indexedDB)
+
   return JSON.stringify({
     time: new Date().getTime(),
     version: BACKUP_LOCAL_STORAGE_VERSION,
     localStorage: createBackupLocalStorageSnapshot(),
-    indexedDB: await backupDatabase()
+    indexedDB,
+    // Desktop migration zips previously only carried image references (file IDs /
+    // desktop paths). Mobile restore needs the actual bytes, so we inline the
+    // message-linked image assets here while keeping the legacy JSON layout intact.
+    portableImageAssets
   })
 }
 
