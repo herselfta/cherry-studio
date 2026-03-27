@@ -140,4 +140,42 @@ describe('mobileSyncUtils', () => {
       })
     ])
   })
+
+  it('keeps the mirrored default assistant entry in sync with the imported default avatar', () => {
+    const currentDefaultAssistant = createAssistant({
+      id: 'default',
+      name: 'Desktop Default',
+      avatar: 'image://desktop-default-avatar',
+      topics: [createTopic({ id: 'desktop-default-topic', assistantId: 'default' })]
+    })
+
+    const result = buildDesktopSyncAssistantState({
+      currentDefaultAssistant,
+      currentAssistants: [currentDefaultAssistant],
+      incomingDefaultAssistant: createAssistant({
+        id: 'default',
+        name: 'Mobile Default',
+        avatar: 'data:image/png;base64,mobile-default-avatar',
+        topics: [createTopic({ id: 'mobile-default-topic', assistantId: 'default' })]
+      }),
+      incomingAssistants: [],
+      normalizedTopics: [
+        createTopic({ id: 'desktop-default-topic', assistantId: 'default' }),
+        createTopic({ id: 'mobile-default-topic', assistantId: 'default' })
+      ]
+    })
+
+    expect(result.defaultAssistant).toEqual(
+      expect.objectContaining({
+        name: 'Mobile Default',
+        avatar: 'data:image/png;base64,mobile-default-avatar'
+      })
+    )
+    expect(result.assistants.find((assistant) => assistant.id === 'default')).toEqual(
+      expect.objectContaining({
+        name: 'Mobile Default',
+        avatar: 'data:image/png;base64,mobile-default-avatar'
+      })
+    )
+  })
 })

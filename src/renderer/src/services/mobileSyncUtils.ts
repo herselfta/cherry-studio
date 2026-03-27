@@ -165,10 +165,11 @@ export function buildDesktopSyncAssistantState({
   )
 
   const allAssistantIds = new Set<string>([
+    currentDefaultAssistant.id,
+    incomingDefaultAssistant.id,
     ...currentAssistants.map((assistant) => assistant.id),
     ...incomingAssistants.map((assistant) => assistant.id)
   ])
-  allAssistantIds.delete('default')
 
   const defaultAssistant = {
     ...currentDefaultAssistant,
@@ -182,8 +183,12 @@ export function buildDesktopSyncAssistantState({
   const assistants = Array.from(allAssistantIds).map((assistantId) => {
     const currentAssistant = currentAssistants.find((assistant) => assistant.id === assistantId)
     const incomingAssistant = incomingAssistantMap.get(assistantId)
+    const fallbackAssistant =
+      assistantId === currentDefaultAssistant.id || assistantId === incomingDefaultAssistant.id
+        ? currentDefaultAssistant
+        : createFallbackAssistant(assistantId, [])
     const baseAssistant = {
-      ...createFallbackAssistant(assistantId, []),
+      ...fallbackAssistant,
       ...currentAssistant,
       ...incomingAssistant
     }
