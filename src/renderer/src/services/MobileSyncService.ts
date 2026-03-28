@@ -2,10 +2,10 @@ import { loggerService } from '@logger'
 import db from '@renderer/databases'
 import i18n from '@renderer/i18n'
 import store, { persistor } from '@renderer/store'
-import type { Assistant, MCPServer, Provider, Topic, WebDavConfig, WebSearchProvider } from '@renderer/types'
+import type { Assistant, Provider, Topic, WebDavConfig, WebSearchProvider } from '@renderer/types'
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
 
-import { BACKUP_AWARE_LOCAL_STORAGE_KEYS, PERSISTED_REDUX_STATE_STORAGE_KEY } from './BackupLocalStorage'
+import { PERSISTED_REDUX_STATE_STORAGE_KEY } from './BackupLocalStorage'
 import { buildPortableImageAssets, type PortableImageAsset } from './BackupService'
 import {
   applyPortableSyncImageAssets,
@@ -23,7 +23,6 @@ export const MOBILE_SYNC_FILE_MARKER = '.mobile-sync.'
 
 type SyncSettings = {
   userName?: string
-  theme?: string
   avatar?: string
 }
 
@@ -40,15 +39,11 @@ type SyncData = {
     searchWithTime?: boolean
     maxResults?: number
   }
-  mcp: {
-    servers: MCPServer[]
-  }
   settings: SyncSettings
   topics: SyncTopic[]
   messages: SyncMessage[]
   messageBlocks: SyncMessageBlock[]
   portableImageAssets?: PortableSyncImageAsset[]
-  localStorage: Partial<Record<(typeof BACKUP_AWARE_LOCAL_STORAGE_KEYS)[number], string>>
 }
 
 type SyncTopic = Omit<Topic, 'createdAt' | 'updatedAt' | 'messages'> & {
@@ -76,6 +71,16 @@ type MobileSyncPayload = {
 
 type PersistedReduxState = Record<string, string>
 
+export function buildPortableSyncSettings(
+  settings: Partial<Pick<ReturnType<typeof store.getState>['settings'], 'userName'>>,
+  avatar?: string
+): SyncSettings {
+  return {
+    userName: settings.userName,
+    avatar: avatar || undefined
+  }
+}
+
 function sanitizeAssistantForSync(assistant: Assistant): Assistant {
   return {
     id: assistant.id,
@@ -96,16 +101,6 @@ function sanitizeAssistantForSync(assistant: Assistant): Assistant {
     mcpServers: assistant.mcpServers,
     topics: assistant.topics.map((topic) => ({ ...toSyncTopic(topic), messages: [] as never[] })) as unknown as Topic[]
   }
-}
-
-function readPortableLocalStorage(): SyncData['localStorage'] {
-  return BACKUP_AWARE_LOCAL_STORAGE_KEYS.reduce<SyncData['localStorage']>((result, key) => {
-    const value = localStorage.getItem(key)
-    if (value !== null) {
-      result[key] = value
-    }
-    return result
-  }, {})
 }
 
 function toTimestamp(value: string | number | undefined): number {
@@ -315,19 +310,13 @@ export async function exportMobileSyncPayload(): Promise<string> {
         searchWithTime: currentState.websearch.searchWithTime,
         maxResults: currentState.websearch.maxResults
       },
-      mcp: {
-        servers: currentState.mcp.servers || []
-      },
       settings: {
-        userName: currentState.settings.userName,
-        theme: currentState.settings.theme,
-        avatar: avatarSetting?.value
+        ...buildPortableSyncSettings(currentState.settings, avatarSetting?.value)
       },
       topics,
       messages,
       messageBlocks: messageBlocks.map(toSyncMessageBlock),
-      portableImageAssets,
-      localStorage: readPortableLocalStorage()
+      portableImageAssets
     }
   }
 
@@ -415,7 +404,6 @@ export async function importMobileSyncPayload(payload: string) {
   const currentLlm = readPersistedSlice(persistedState, 'llm', store.getState().llm)
   const currentWebsearch = readPersistedSlice(persistedState, 'websearch', store.getState().websearch)
   const currentSettings = readPersistedSlice(persistedState, 'settings', store.getState().settings)
-  const currentMcp = readPersistedSlice(persistedState, 'mcp', store.getState().mcp)
   const incomingMessages = parsed.data.messages.map(toDesktopMessage)
   const visibleAssistantIds = new Set<string>([
     currentAssistants.defaultAssistant.id,
@@ -475,22 +463,10 @@ export async function importMobileSyncPayload(payload: string) {
 
   writePersistedSlice(persistedState, 'settings', {
     ...currentSettings,
-    userName: parsed.data.settings.userName ?? currentSettings.userName,
-    theme: parsed.data.settings.theme ?? currentSettings.theme
-  })
-
-  writePersistedSlice(persistedState, 'mcp', {
-    ...currentMcp,
-    servers: mergeById(currentMcp.servers || [], parsed.data.mcp.servers || [])
+    userName: parsed.data.settings.userName ?? currentSettings.userName
   })
 
   localStorage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, JSON.stringify(persistedState))
-
-  for (const [key, value] of Object.entries(parsed.data.localStorage)) {
-    if (typeof value === 'string') {
-      localStorage.setItem(key, value)
-    }
-  }
 
   await db.transaction('rw', db.table('topics'), db.table('message_blocks'), db.table('settings'), async () => {
     for (const topic of normalizedTopics) {

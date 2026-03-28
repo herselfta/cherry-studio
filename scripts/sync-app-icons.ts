@@ -25,11 +25,6 @@ const SOURCE_DIRECTORIES: Record<SourceKind, string> = {
   providers: path.join(DESKTOP_ROOT, 'src/renderer/src/assets/images/providers')
 }
 
-const TARGET_DIRECTORIES: Record<Variant, string> = {
-  dark: path.join(DEFAULT_APP_ROOT, 'src/assets/images/llmIcons/dark'),
-  light: path.join(DEFAULT_APP_ROOT, 'src/assets/images/llmIcons/light')
-}
-
 const SOURCE_EXTENSION_PRIORITY = ['.png', '.webp', '.jpeg', '.jpg', '.svg']
 const SVG_DENSITY = 384
 
