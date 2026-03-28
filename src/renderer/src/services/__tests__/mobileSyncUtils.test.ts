@@ -11,7 +11,8 @@ import { describe, expect, it } from 'vitest'
 import {
   applyPortableSyncImageAssets,
   buildDesktopSyncAssistantState,
-  normalizeDesktopSyncTopics
+  normalizeDesktopSyncTopics,
+  resolveDesktopConversationSync
 } from '../mobileSyncUtils'
 
 function createTopic(overrides: Partial<Topic> & Pick<Topic, 'id' | 'assistantId'>): Topic {
@@ -298,5 +299,124 @@ describe('mobileSyncUtils', () => {
         url: 'data:image/png;base64,desktop-mobile-image'
       })
     )
+  })
+
+  it('keeps local-only conversations while deleting entities previously seen from the same source device', () => {
+    const result = resolveDesktopConversationSync({
+      currentTopics: [
+        createTopic({ id: 'local-topic', assistantId: 'default' }),
+        createTopic({ id: 'shared-topic', assistantId: 'default' }),
+        createTopic({ id: 'removed-topic', assistantId: 'default' })
+      ],
+      incomingTopics: [
+        createTopic({ id: 'shared-topic', assistantId: 'default', updatedAt: '2026-03-24T00:05:00.000Z' })
+      ],
+      currentMessages: [
+        createMessage({ id: 'local-message', assistantId: 'default', topicId: 'local-topic' }),
+        createMessage({ id: 'shared-message', assistantId: 'default', topicId: 'shared-topic' }),
+        createMessage({ id: 'removed-message', assistantId: 'default', topicId: 'removed-topic' })
+      ],
+      incomingMessages: [
+        createMessage({
+          id: 'shared-message',
+          assistantId: 'default',
+          topicId: 'shared-topic',
+          updatedAt: '2026-03-24T00:06:00.000Z'
+        })
+      ],
+      currentMessageBlocks: [
+        createImageBlock({ id: 'local-block', messageId: 'local-message' }),
+        createImageBlock({ id: 'shared-block', messageId: 'shared-message' }),
+        createImageBlock({ id: 'removed-block', messageId: 'removed-message' })
+      ],
+      incomingMessageBlocks: [createImageBlock({ id: 'shared-block', messageId: 'shared-message' })],
+      exportedAt: 20,
+      previousLedgerEntry: {
+        lastImportedExportedAt: 10,
+        topicIds: ['shared-topic', 'removed-topic'],
+        messageIds: ['shared-message', 'removed-message'],
+        blockIds: ['shared-block', 'removed-block']
+      }
+    })
+
+    expect(result.deletedTopicIds).toEqual(['removed-topic'])
+    expect(result.deletedMessageIds).toEqual(['removed-message'])
+    expect(result.deletedBlockIds).toEqual(['removed-block'])
+    expect(result.topics.map((topic) => topic.id)).toEqual(expect.arrayContaining(['local-topic', 'shared-topic']))
+    expect(result.topics.map((topic) => topic.id)).not.toContain('removed-topic')
+    expect(result.messages.map((message) => message.id)).toEqual(
+      expect.arrayContaining(['local-message', 'shared-message'])
+    )
+    expect(result.nextLedgerEntry).toEqual(
+      expect.objectContaining({
+        lastImportedExportedAt: 20,
+        topicIds: ['shared-topic'],
+        messageIds: ['shared-message'],
+        blockIds: ['shared-block']
+      })
+    )
+  })
+
+  it('downgrades stale imports to non-destructive merge mode', () => {
+    const result = resolveDesktopConversationSync({
+      currentTopics: [
+        createTopic({ id: 'local-topic', assistantId: 'default' }),
+        createTopic({ id: 'previously-synced-topic', assistantId: 'default' })
+      ],
+      incomingTopics: [createTopic({ id: 'local-topic', assistantId: 'default' })],
+      currentMessages: [
+        createMessage({ id: 'local-message', assistantId: 'default', topicId: 'local-topic' }),
+        createMessage({ id: 'previously-synced-message', assistantId: 'default', topicId: 'previously-synced-topic' })
+      ],
+      incomingMessages: [createMessage({ id: 'local-message', assistantId: 'default', topicId: 'local-topic' })],
+      currentMessageBlocks: [
+        createImageBlock({ id: 'previously-synced-block', messageId: 'previously-synced-message' })
+      ],
+      incomingMessageBlocks: [],
+      exportedAt: 5,
+      previousLedgerEntry: {
+        lastImportedExportedAt: 10,
+        topicIds: ['previously-synced-topic'],
+        messageIds: ['previously-synced-message'],
+        blockIds: ['previously-synced-block']
+      }
+    })
+
+    expect(result.isStaleImport).toBe(true)
+    expect(result.deletedTopicIds).toEqual([])
+    expect(result.deletedMessageIds).toEqual([])
+    expect(result.deletedBlockIds).toEqual([])
+    expect(result.topics.map((topic) => topic.id)).toEqual(
+      expect.arrayContaining(['local-topic', 'previously-synced-topic'])
+    )
+  })
+
+  it('rebuilds assistant topic indexes from final topics when replacement mode is enabled', () => {
+    const currentAssistants = [
+      createAssistant({
+        id: 'assistant-a',
+        name: 'Assistant A',
+        topics: [createTopic({ id: 'moved-topic', assistantId: 'assistant-a' })]
+      }),
+      createAssistant({
+        id: 'assistant-b',
+        name: 'Assistant B',
+        topics: []
+      })
+    ]
+
+    const result = buildDesktopSyncAssistantState({
+      currentDefaultAssistant: createAssistant({ id: 'default', name: 'Default', topics: [] }),
+      currentAssistants,
+      incomingDefaultAssistant: createAssistant({ id: 'default', name: 'Default', topics: [] }),
+      incomingAssistants: currentAssistants,
+      normalizedTopics: [createTopic({ id: 'moved-topic', assistantId: 'assistant-b' })],
+      replaceTopics: true
+    })
+
+    expect(result.assistants.find((assistant) => assistant.id === 'assistant-a')?.topics).toEqual([])
+    expect(result.assistants.find((assistant) => assistant.id === 'assistant-b')?.topics).toEqual([
+      expect.objectContaining({ id: 'moved-topic' })
+    ])
   })
 })

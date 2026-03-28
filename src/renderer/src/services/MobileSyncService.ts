@@ -8,17 +8,22 @@ import type { Message, MessageBlock } from '@renderer/types/newMessage'
 import { PERSISTED_REDUX_STATE_STORAGE_KEY } from './BackupLocalStorage'
 import { buildPortableImageAssets, type PortableImageAsset } from './BackupService'
 import {
+  getMobileSyncLedgerEntry,
+  getOrCreateMobileSyncSourceDeviceId,
+  writeMobileSyncLedgerEntry
+} from './mobileSyncLedger'
+import {
   applyPortableSyncImageAssets,
   buildDesktopSyncAssistantState,
   filterDesktopSyncMessageBlocks,
   normalizeDesktopSyncTopics,
-  type PortableSyncImageAsset
-} from './mobileSyncUtils'
+  type PortableSyncImageAsset,
+  resolveDesktopConversationSync} from './mobileSyncUtils'
 
 const logger = loggerService.withContext('MobileSyncService')
 
 export const MOBILE_SYNC_SCHEMA = 'cherry-studio-cross-device-sync'
-export const MOBILE_SYNC_SCHEMA_VERSION = 1
+export const MOBILE_SYNC_SCHEMA_VERSION = 2
 export const MOBILE_SYNC_FILE_MARKER = '.mobile-sync.'
 
 type SyncSettings = {
@@ -65,6 +70,8 @@ type MobileSyncPayload = {
   schema: typeof MOBILE_SYNC_SCHEMA
   version: number
   source: 'desktop' | 'mobile'
+  sourceDeviceId?: string
+  sourcePlatform?: 'desktop' | 'mobile'
   exportedAt: number
   data: SyncData
 }
@@ -214,6 +221,49 @@ function collectTopicMetadata(currentState: ReturnType<typeof store.getState>) {
   ]
 }
 
+function collectTopicMetadataFromAssistantState(assistantsState: ReturnType<typeof store.getState>['assistants']) {
+  return [
+    ...assistantsState.assistants.flatMap((assistant) => assistant.topics),
+    ...assistantsState.defaultAssistant.topics
+  ]
+}
+
+function buildDesktopConversationSnapshot(
+  topicRecords: Array<{ id: string; messages?: Message[] }>,
+  topicMetadata: Map<string, Topic>
+) {
+  const messages: Message[] = []
+  const topics: Topic[] = []
+
+  for (const record of topicRecords) {
+    const topic = topicMetadata.get(record.id)
+    const topicMessages = sortMessages(record.messages || [])
+    messages.push(...topicMessages)
+
+    if (topic) {
+      topics.push({
+        ...topic,
+        messages: []
+      })
+      continue
+    }
+
+    topics.push({
+      id: record.id,
+      assistantId: topicMessages[0]?.assistantId || 'default',
+      name: record.id,
+      createdAt: toIsoString(topicMessages[0]?.createdAt),
+      updatedAt: toIsoString(topicMessages.at(-1)?.updatedAt || topicMessages.at(-1)?.createdAt),
+      messages: []
+    })
+  }
+
+  return {
+    topics,
+    messages
+  }
+}
+
 export function isMobileSyncPayload(payload: string): boolean {
   try {
     return isMobileSyncPayloadObject(JSON.parse(payload))
@@ -264,6 +314,7 @@ export async function exportMobileSyncPayload(): Promise<string> {
   const files = await db.table('files').toArray()
   const avatarSetting = await db.table('settings').get('image://avatar')
   const topicMetadata = new Map(collectTopicMetadata(currentState).map((topic) => [topic.id, topic]))
+  const sourceDeviceId = getOrCreateMobileSyncSourceDeviceId()
 
   const messages: SyncMessage[] = []
   const topics: SyncTopic[] = []
@@ -296,6 +347,8 @@ export async function exportMobileSyncPayload(): Promise<string> {
     schema: MOBILE_SYNC_SCHEMA,
     version: MOBILE_SYNC_SCHEMA_VERSION,
     source: 'desktop',
+    sourceDeviceId,
+    sourcePlatform: 'desktop',
     exportedAt: Date.now(),
     data: {
       assistants: {
@@ -405,6 +458,14 @@ export async function importMobileSyncPayload(payload: string) {
   const currentWebsearch = readPersistedSlice(persistedState, 'websearch', store.getState().websearch)
   const currentSettings = readPersistedSlice(persistedState, 'settings', store.getState().settings)
   const incomingMessages = parsed.data.messages.map(toDesktopMessage)
+  const incomingDefaultAssistant = {
+    ...parsed.data.assistants.defaultAssistant,
+    topics: toDesktopTopics(parsed.data.assistants.defaultAssistant.topics)
+  }
+  const incomingAssistants = parsed.data.assistants.assistants.map((assistant) => ({
+    ...assistant,
+    topics: toDesktopTopics(assistant.topics)
+  }))
   const visibleAssistantIds = new Set<string>([
     currentAssistants.defaultAssistant.id,
     parsed.data.assistants.defaultAssistant.id,
@@ -429,25 +490,6 @@ export async function importMobileSyncPayload(payload: string) {
     normalizedMessageBlocks,
     parsed.data.portableImageAssets || []
   )
-  const { assistants: incomingAssistants, defaultAssistant: mergedDefaultAssistant } = buildDesktopSyncAssistantState({
-    currentDefaultAssistant: currentAssistants.defaultAssistant,
-    currentAssistants: currentAssistants.assistants,
-    incomingDefaultAssistant: {
-      ...parsed.data.assistants.defaultAssistant,
-      topics: toDesktopTopics(parsed.data.assistants.defaultAssistant.topics)
-    },
-    incomingAssistants: parsed.data.assistants.assistants.map((assistant) => ({
-      ...assistant,
-      topics: toDesktopTopics(assistant.topics)
-    })),
-    normalizedTopics
-  })
-
-  writePersistedSlice(persistedState, 'assistants', {
-    ...currentAssistants,
-    defaultAssistant: mergedDefaultAssistant,
-    assistants: mergeById(currentAssistants.assistants, incomingAssistants)
-  })
 
   writePersistedSlice(persistedState, 'llm', {
     ...currentLlm,
@@ -466,36 +508,146 @@ export async function importMobileSyncPayload(payload: string) {
     userName: parsed.data.settings.userName ?? currentSettings.userName
   })
 
-  localStorage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, JSON.stringify(persistedState))
+  const shouldUseSourceAwareImport = parsed.version >= 2 && Boolean(parsed.sourceDeviceId)
 
-  await db.transaction('rw', db.table('topics'), db.table('message_blocks'), db.table('settings'), async () => {
-    for (const topic of normalizedTopics) {
-      const existing = (await db.table('topics').get(topic.id)) as { id: string; messages?: Message[] } | undefined
-      const topicMessages = incomingMessages.filter((message) => message.topicId === topic.id)
-      const mergedMessages = sortMessages(
-        mergeById<Message>(
-          existing?.messages || [],
-          topicMessages.map((message) => ({ ...message }))
+  if (!shouldUseSourceAwareImport) {
+    const { assistants: mergedAssistants, defaultAssistant: mergedDefaultAssistant } = buildDesktopSyncAssistantState({
+      currentDefaultAssistant: currentAssistants.defaultAssistant,
+      currentAssistants: currentAssistants.assistants,
+      incomingDefaultAssistant,
+      incomingAssistants,
+      normalizedTopics
+    })
+
+    writePersistedSlice(persistedState, 'assistants', {
+      ...currentAssistants,
+      defaultAssistant: mergedDefaultAssistant,
+      assistants: mergeById(currentAssistants.assistants, mergedAssistants)
+    })
+
+    localStorage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, JSON.stringify(persistedState))
+
+    await db.transaction('rw', db.table('topics'), db.table('message_blocks'), db.table('settings'), async () => {
+      for (const topic of normalizedTopics) {
+        const existing = (await db.table('topics').get(topic.id)) as { id: string; messages?: Message[] } | undefined
+        const topicMessages = incomingMessages.filter((message) => message.topicId === topic.id)
+        const mergedMessages = sortMessages(
+          mergeById<Message>(
+            existing?.messages || [],
+            topicMessages.map((message) => ({ ...message }))
+          )
         )
+
+        await db.table('topics').put({
+          id: topic.id,
+          messages: mergedMessages
+        })
+      }
+
+      if (portableMessageBlocks.length > 0) {
+        await db.table('message_blocks').bulkPut(portableMessageBlocks)
+      }
+
+      if (parsed.data.settings.avatar) {
+        await db.table('settings').put({
+          id: 'image://avatar',
+          value: parsed.data.settings.avatar
+        })
+      }
+    })
+  } else {
+    const currentTopicRecords = (await db.table('topics').toArray()) as Array<{ id: string; messages?: Message[] }>
+    const currentMessageBlocks = (await db.table('message_blocks').toArray()) as MessageBlock[]
+    const currentTopicMetadata = new Map(
+      collectTopicMetadataFromAssistantState(currentAssistants).map((topic) => [topic.id, topic])
+    )
+    const currentConversation = buildDesktopConversationSnapshot(currentTopicRecords, currentTopicMetadata)
+    const previousLedgerEntry = getMobileSyncLedgerEntry(parsed.sourceDeviceId!)
+    const resolvedConversation = resolveDesktopConversationSync({
+      currentTopics: currentConversation.topics,
+      incomingTopics: normalizedTopics,
+      currentMessages: currentConversation.messages,
+      incomingMessages,
+      currentMessageBlocks,
+      incomingMessageBlocks: portableMessageBlocks,
+      exportedAt: parsed.exportedAt,
+      previousLedgerEntry
+    })
+    const { assistants: syncedAssistants, defaultAssistant: syncedDefaultAssistant } = buildDesktopSyncAssistantState({
+      currentDefaultAssistant: currentAssistants.defaultAssistant,
+      currentAssistants: currentAssistants.assistants,
+      incomingDefaultAssistant,
+      incomingAssistants,
+      normalizedTopics: resolvedConversation.topics,
+      replaceTopics: true
+    })
+
+    writePersistedSlice(persistedState, 'assistants', {
+      ...currentAssistants,
+      defaultAssistant: syncedDefaultAssistant,
+      assistants: syncedAssistants
+    })
+
+    localStorage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, JSON.stringify(persistedState))
+
+    await db.transaction('rw', db.table('topics'), db.table('message_blocks'), db.table('settings'), async () => {
+      if (resolvedConversation.deletedTopicIds.length > 0) {
+        await db.table('topics').bulkDelete(resolvedConversation.deletedTopicIds)
+      }
+
+      const messagesByTopicId = resolvedConversation.messages.reduce<Map<string, Message[]>>((result, message) => {
+        const existing = result.get(message.topicId) || []
+        result.set(message.topicId, [...existing, message])
+        return result
+      }, new Map())
+
+      for (const topic of resolvedConversation.topics) {
+        await db.table('topics').put({
+          id: topic.id,
+          messages: sortMessages(messagesByTopicId.get(topic.id) || [])
+        })
+      }
+
+      if (resolvedConversation.deletedBlockIds.length > 0) {
+        await db.table('message_blocks').bulkDelete(resolvedConversation.deletedBlockIds)
+      }
+
+      if (resolvedConversation.messageBlocks.length > 0) {
+        await db.table('message_blocks').bulkPut(resolvedConversation.messageBlocks)
+      }
+
+      if (parsed.data.settings.avatar) {
+        await db.table('settings').put({
+          id: 'image://avatar',
+          value: parsed.data.settings.avatar
+        })
+      }
+    })
+
+    if (!resolvedConversation.isStaleImport && resolvedConversation.nextLedgerEntry) {
+      writeMobileSyncLedgerEntry(parsed.sourceDeviceId!, resolvedConversation.nextLedgerEntry)
+    } else if (resolvedConversation.isStaleImport) {
+      logger.warn(
+        `Skipping destructive mobile sync actions for stale payload from ${parsed.sourceDeviceId} exported at ${parsed.exportedAt}`
       )
-
-      await db.table('topics').put({
-        id: topic.id,
-        messages: mergedMessages
-      })
     }
 
-    if (portableMessageBlocks.length > 0) {
-      await db.table('message_blocks').bulkPut(portableMessageBlocks)
+    if (resolvedConversation.deletedTopicIds.length > 0) {
+      logger.info(
+        `Deleted ${resolvedConversation.deletedTopicIds.length} topic(s) from mobile sync snapshot reconciliation`
+      )
     }
-
-    if (parsed.data.settings.avatar) {
-      await db.table('settings').put({
-        id: 'image://avatar',
-        value: parsed.data.settings.avatar
-      })
+    if (resolvedConversation.deletedMessageIds.length > 0) {
+      logger.info(
+        `Deleted ${resolvedConversation.deletedMessageIds.length} message(s) from mobile sync snapshot reconciliation`
+      )
     }
-  })
+    if (resolvedConversation.deletedBlockIds.length > 0) {
+      logger.info(
+        `Deleted ${resolvedConversation.deletedBlockIds.length} block(s) from mobile sync snapshot reconciliation`
+      )
+    }
+  }
 
   if (synthesizedTopicCount > 0) {
     logger.warn(`Synthesized ${synthesizedTopicCount} missing topic record(s) from mobile sync messages`)
