@@ -224,6 +224,71 @@ describe('mobileSyncUtils', () => {
     ])
   })
 
+  it('prefers the topic candidate whose assistant matches the exported message stream, even if stale metadata is newer', () => {
+    const result = normalizeDesktopSyncExportTopics({
+      assistants: [
+        createAssistant({ id: 'assistant-a', name: 'Assistant A' }),
+        createAssistant({ id: 'assistant-b', name: 'Assistant B' })
+      ],
+      topics: [
+        createTopic({
+          id: 'shared-topic',
+          assistantId: 'assistant-a',
+          name: 'stale topic metadata',
+          updatedAt: '2026-03-24T00:10:00.000Z'
+        }),
+        createTopic({
+          id: 'shared-topic',
+          assistantId: 'assistant-b',
+          name: 'renamed topic on desktop',
+          updatedAt: '2026-03-24T00:05:00.000Z'
+        })
+      ],
+      messages: [createMessage({ id: 'shared-message', assistantId: 'assistant-b', topicId: 'shared-topic' })]
+    })
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'shared-topic',
+        assistantId: 'assistant-b',
+        name: 'renamed topic on desktop'
+      })
+    ])
+  })
+
+  it('keeps the newer topic ownership when the exported message stream is stale', () => {
+    const result = normalizeDesktopSyncExportTopics({
+      assistants: [
+        createAssistant({ id: 'assistant-a', name: 'Assistant A' }),
+        createAssistant({ id: 'assistant-b', name: 'Assistant B' })
+      ],
+      topics: [
+        createTopic({
+          id: 'shared-topic',
+          assistantId: 'assistant-b',
+          name: 'renamed topic on desktop',
+          updatedAt: '2026-03-24T00:10:00.000Z'
+        })
+      ],
+      messages: [
+        createMessage({
+          id: 'shared-message',
+          assistantId: 'assistant-a',
+          topicId: 'shared-topic',
+          updatedAt: '2026-03-24T00:05:00.000Z'
+        })
+      ]
+    })
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'shared-topic',
+        assistantId: 'assistant-b',
+        name: 'renamed topic on desktop'
+      })
+    ])
+  })
+
   it('keeps the mirrored default assistant entry in sync with the imported default avatar', () => {
     const currentDefaultAssistant = createAssistant({
       id: 'default',

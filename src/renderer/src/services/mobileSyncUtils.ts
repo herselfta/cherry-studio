@@ -110,15 +110,42 @@ function getPortableConversationGroupKey(message: Message) {
 }
 
 function resolveVisibleAssistantId(
-  topic: Pick<Topic, 'assistantId'> | undefined,
+  topic: Pick<Topic, 'assistantId' | 'createdAt' | 'updatedAt'> | undefined,
   messages: Message[],
   visibleAssistantIds: Set<string>
 ) {
-  if (topic?.assistantId && visibleAssistantIds.has(topic.assistantId)) {
-    return topic.assistantId
+  const visibleMessages = messages.filter((message) => visibleAssistantIds.has(message.assistantId))
+  const visibleTopicAssistantId =
+    topic?.assistantId && visibleAssistantIds.has(topic.assistantId) ? topic.assistantId : undefined
+  const latestVisibleMessage = [...visibleMessages].sort(
+    (left, right) => getEntityTimestamp(right) - getEntityTimestamp(left)
+  )[0]
+  const visibleMessageAssistantIds = Array.from(new Set(visibleMessages.map((message) => message.assistantId)))
+
+  if (!visibleTopicAssistantId) {
+    return latestVisibleMessage?.assistantId
   }
 
-  return messages.map((message) => message.assistantId).find((assistantId) => visibleAssistantIds.has(assistantId))
+  if (visibleMessageAssistantIds.length === 0) {
+    return visibleTopicAssistantId
+  }
+
+  if (visibleMessageAssistantIds.includes(visibleTopicAssistantId)) {
+    return visibleTopicAssistantId
+  }
+
+  const topicTimestamp = topic ? getEntityTimestamp(topic) : 0
+  const latestMessageTimestamp = latestVisibleMessage ? getEntityTimestamp(latestVisibleMessage) : 0
+
+  if (topicTimestamp > latestMessageTimestamp) {
+    return visibleTopicAssistantId
+  }
+
+  if (visibleMessageAssistantIds.length === 1) {
+    return visibleMessageAssistantIds[0]
+  }
+
+  return latestVisibleMessage?.assistantId || visibleTopicAssistantId
 }
 
 function selectPortableAssistantMessages(messages: Message[]) {
@@ -171,6 +198,11 @@ export function normalizeDesktopSyncExportTopics({
   messages
 }: NormalizeDesktopSyncExportTopicsParams): Topic[] {
   const visibleAssistantIds = new Set(assistants.map((assistant) => assistant.id))
+  const topicCandidatesById = topics.reduce<Map<string, Topic[]>>((result, topic) => {
+    const existing = result.get(topic.id) || []
+    result.set(topic.id, [...existing, topic])
+    return result
+  }, new Map())
   const messagesByTopicId = messages.reduce<Map<string, Message[]>>((result, message) => {
     const existing = result.get(message.topicId) || []
     result.set(message.topicId, [...existing, message])
@@ -178,30 +210,33 @@ export function normalizeDesktopSyncExportTopics({
   }, new Map())
   const normalizedTopics = new Map<string, Topic>()
 
-  for (const topic of topics) {
-    const topicMessages = messagesByTopicId.get(topic.id) || []
-    if (topicMessages.length === 0) {
-      continue
-    }
-
-    const assistantId = resolveVisibleAssistantId(topic, topicMessages, visibleAssistantIds)
-    if (!assistantId) {
-      continue
-    }
-
-    normalizedTopics.set(
-      topic.id,
-      pickNewerEntity(normalizedTopics.get(topic.id), sanitizeTopic({ ...topic, assistantId }))
-    )
-  }
-
   for (const [topicId, topicMessages] of messagesByTopicId.entries()) {
-    if (normalizedTopics.has(topicId)) {
+    const topicCandidates = topicCandidatesById.get(topicId) || []
+    const visibleMessageAssistantIds = new Set(
+      topicMessages.map((message) => message.assistantId).filter((assistantId) => visibleAssistantIds.has(assistantId))
+    )
+    const candidateMatchingMessageStream = topicCandidates
+      .filter((topic) => visibleMessageAssistantIds.has(topic.assistantId))
+      .sort((left, right) => getEntityTimestamp(right) - getEntityTimestamp(left))[0]
+    const newestCandidate = [...topicCandidates].sort(
+      (left, right) => getEntityTimestamp(right) - getEntityTimestamp(left)
+    )[0]
+    const referenceCandidate = candidateMatchingMessageStream || newestCandidate
+    const assistantId = resolveVisibleAssistantId(referenceCandidate, topicMessages, visibleAssistantIds)
+    if (!assistantId) {
       continue
     }
 
-    const assistantId = resolveVisibleAssistantId(undefined, topicMessages, visibleAssistantIds)
-    if (!assistantId) {
+    const matchedCandidate = topicCandidates
+      .filter((topic) => topic.assistantId === assistantId)
+      .sort((left, right) => getEntityTimestamp(right) - getEntityTimestamp(left))[0]
+    const visibleCandidate = topicCandidates
+      .filter((topic) => visibleAssistantIds.has(topic.assistantId))
+      .sort((left, right) => getEntityTimestamp(right) - getEntityTimestamp(left))[0]
+    const canonicalCandidate = matchedCandidate || referenceCandidate || visibleCandidate
+
+    if (canonicalCandidate) {
+      normalizedTopics.set(topicId, sanitizeTopic({ ...canonicalCandidate, assistantId }))
       continue
     }
 
