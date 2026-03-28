@@ -349,6 +349,19 @@ export async function exportMobileSyncPayload(): Promise<string> {
     files
   } as Record<string, any>)) as PortableImageAsset[]
 
+  logger.info('Exporting mobile sync payload', {
+    version: MOBILE_SYNC_SCHEMA_VERSION,
+    sourcePlatform: 'desktop',
+    sourceDeviceId,
+    rawTopicCount: topics.length,
+    normalizedTopicCount: topics.length,
+    rawMessageCount: rawMessages.length,
+    normalizedMessageCount: normalizedMessages.length,
+    rawBlockCount: messageBlocks.length,
+    normalizedBlockCount: normalizedMessageBlocks.length,
+    portableImageAssetCount: portableImageAssets.length
+  })
+
   const payload: MobileSyncPayload = {
     schema: MOBILE_SYNC_SCHEMA,
     version: MOBILE_SYNC_SCHEMA_VERSION,
@@ -463,7 +476,8 @@ export async function importMobileSyncPayload(payload: string) {
   const currentLlm = readPersistedSlice(persistedState, 'llm', store.getState().llm)
   const currentWebsearch = readPersistedSlice(persistedState, 'websearch', store.getState().websearch)
   const currentSettings = readPersistedSlice(persistedState, 'settings', store.getState().settings)
-  const incomingMessages = parsed.data.messages.map(toDesktopMessage)
+  const rawIncomingMessages = parsed.data.messages.map(toDesktopMessage)
+  const incomingMessages = normalizePortableConversationMessages(rawIncomingMessages)
   const incomingDefaultAssistant = {
     ...parsed.data.assistants.defaultAssistant,
     topics: toDesktopTopics(parsed.data.assistants.defaultAssistant.topics)
@@ -488,8 +502,9 @@ export async function importMobileSyncPayload(payload: string) {
     incomingMessages,
     visibleAssistantIds
   )
+  const rawPortableMessageBlocks = parsed.data.messageBlocks.map(toDesktopMessageBlock)
   const { droppedBlockCount, messageBlocks: normalizedMessageBlocks } = filterDesktopSyncMessageBlocks(
-    parsed.data.messageBlocks.map(toDesktopMessageBlock),
+    rawPortableMessageBlocks,
     incomingMessages
   )
   const portableMessageBlocks = applyPortableSyncImageAssets(
@@ -515,6 +530,38 @@ export async function importMobileSyncPayload(payload: string) {
   })
 
   const shouldUseSourceAwareImport = parsed.version >= 2 && Boolean(parsed.sourceDeviceId)
+
+  logger.info('Importing mobile sync payload', {
+    version: parsed.version,
+    source: parsed.source,
+    sourcePlatform: parsed.sourcePlatform,
+    sourceDeviceId: parsed.sourceDeviceId,
+    sourceAware: shouldUseSourceAwareImport,
+    rawIncomingTopicCount: parsed.data.topics.length,
+    rawIncomingMessageCount: rawIncomingMessages.length,
+    rawIncomingBlockCount: rawPortableMessageBlocks.length,
+    normalizedIncomingTopicCount: normalizedTopics.length,
+    normalizedIncomingMessageCount: incomingMessages.length,
+    normalizedIncomingBlockCount: portableMessageBlocks.length
+  })
+
+  if (shouldUseSourceAwareImport && !getMobileSyncLedgerEntry(parsed.sourceDeviceId!)) {
+    logger.warn(
+      `First source-aware mobile sync import detected for ${parsed.sourceDeviceId}. Deletions will become active after this baseline import.`
+    )
+  }
+
+  if (
+    rawIncomingMessages.length !== incomingMessages.length ||
+    rawPortableMessageBlocks.length !== portableMessageBlocks.length
+  ) {
+    logger.info('Normalized legacy-style mobile sync snapshot before import', {
+      rawIncomingMessageCount: rawIncomingMessages.length,
+      normalizedIncomingMessageCount: incomingMessages.length,
+      rawIncomingBlockCount: rawPortableMessageBlocks.length,
+      normalizedIncomingBlockCount: portableMessageBlocks.length
+    })
+  }
 
   if (!shouldUseSourceAwareImport) {
     const { assistants: mergedAssistants, defaultAssistant: mergedDefaultAssistant } = buildDesktopSyncAssistantState({
