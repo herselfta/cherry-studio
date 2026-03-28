@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import {
   applyPortableSyncImageAssets,
   buildDesktopSyncAssistantState,
+  normalizeDesktopSyncExportTopics,
   normalizeDesktopSyncTopics,
   normalizePortableConversationMessages,
   resolveDesktopConversationSync
@@ -189,6 +190,38 @@ describe('mobileSyncUtils', () => {
     const result = normalizeDesktopSyncTopics([createTopic({ id: 'empty-topic', assistantId: 'default' })], [], [])
 
     expect(result.topics).toEqual([])
+  })
+
+  it('normalizes desktop export topics so stale metadata cannot override rename and migration changes', () => {
+    const result = normalizeDesktopSyncExportTopics({
+      assistants: [
+        createAssistant({ id: 'assistant-a', name: 'Assistant A' }),
+        createAssistant({ id: 'assistant-b', name: 'Assistant B' })
+      ],
+      topics: [
+        createTopic({
+          id: 'shared-topic',
+          assistantId: 'assistant-b',
+          name: 'renamed topic on desktop',
+          updatedAt: '2026-03-24T00:05:00.000Z'
+        }),
+        createTopic({
+          id: 'shared-topic',
+          assistantId: 'assistant-a',
+          name: 'stale topic metadata',
+          updatedAt: '2026-03-24T00:00:00.000Z'
+        })
+      ],
+      messages: [createMessage({ id: 'shared-message', assistantId: 'assistant-b', topicId: 'shared-topic' })]
+    })
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'shared-topic',
+        assistantId: 'assistant-b',
+        name: 'renamed topic on desktop'
+      })
+    ])
   })
 
   it('keeps the mirrored default assistant entry in sync with the imported default avatar', () => {

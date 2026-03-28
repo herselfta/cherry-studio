@@ -18,6 +18,12 @@ type NormalizeDesktopSyncTopicsResult = {
   topics: Topic[]
 }
 
+type NormalizeDesktopSyncExportTopicsParams = {
+  assistants: Assistant[]
+  topics: Topic[]
+  messages: Message[]
+}
+
 type FilterSyncMessageBlocksResult = {
   droppedBlockCount: number
   messageBlocks: MessageBlock[]
@@ -103,6 +109,18 @@ function getPortableConversationGroupKey(message: Message) {
   return message.role === 'assistant' && message.askId ? `assistant:${message.askId}` : `message:${message.id}`
 }
 
+function resolveVisibleAssistantId(
+  topic: Pick<Topic, 'assistantId'> | undefined,
+  messages: Message[],
+  visibleAssistantIds: Set<string>
+) {
+  if (topic?.assistantId && visibleAssistantIds.has(topic.assistantId)) {
+    return topic.assistantId
+  }
+
+  return messages.map((message) => message.assistantId).find((assistantId) => visibleAssistantIds.has(assistantId))
+}
+
 function selectPortableAssistantMessages(messages: Message[]) {
   if (messages.length <= 1) {
     return messages
@@ -120,7 +138,7 @@ function selectPortableAssistantMessages(messages: Message[]) {
   return selectedMessage ? [selectedMessage] : messages
 }
 
-function synthesizeTopicFromMessages(topicId: string, messages: Message[]): Topic {
+function synthesizeTopicFromMessages(topicId: string, messages: Message[], assistantId?: string): Topic {
   const sortedMessages = [...messages].sort(
     (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
   )
@@ -129,7 +147,7 @@ function synthesizeTopicFromMessages(topicId: string, messages: Message[]): Topi
 
   return {
     id: topicId,
-    assistantId: firstMessage?.assistantId || 'default',
+    assistantId: assistantId || firstMessage?.assistantId || 'default',
     name: topicId,
     createdAt: firstMessage?.createdAt || new Date().toISOString(),
     updatedAt: lastMessage?.updatedAt || lastMessage?.createdAt || new Date().toISOString(),
@@ -145,6 +163,52 @@ function createFallbackAssistant(assistantId: string, topics: Topic[]): Assistan
     type: 'assistant',
     topics
   }
+}
+
+export function normalizeDesktopSyncExportTopics({
+  assistants,
+  topics,
+  messages
+}: NormalizeDesktopSyncExportTopicsParams): Topic[] {
+  const visibleAssistantIds = new Set(assistants.map((assistant) => assistant.id))
+  const messagesByTopicId = messages.reduce<Map<string, Message[]>>((result, message) => {
+    const existing = result.get(message.topicId) || []
+    result.set(message.topicId, [...existing, message])
+    return result
+  }, new Map())
+  const normalizedTopics = new Map<string, Topic>()
+
+  for (const topic of topics) {
+    const topicMessages = messagesByTopicId.get(topic.id) || []
+    if (topicMessages.length === 0) {
+      continue
+    }
+
+    const assistantId = resolveVisibleAssistantId(topic, topicMessages, visibleAssistantIds)
+    if (!assistantId) {
+      continue
+    }
+
+    normalizedTopics.set(
+      topic.id,
+      pickNewerEntity(normalizedTopics.get(topic.id), sanitizeTopic({ ...topic, assistantId }))
+    )
+  }
+
+  for (const [topicId, topicMessages] of messagesByTopicId.entries()) {
+    if (normalizedTopics.has(topicId)) {
+      continue
+    }
+
+    const assistantId = resolveVisibleAssistantId(undefined, topicMessages, visibleAssistantIds)
+    if (!assistantId) {
+      continue
+    }
+
+    normalizedTopics.set(topicId, synthesizeTopicFromMessages(topicId, topicMessages, assistantId))
+  }
+
+  return Array.from(normalizedTopics.values())
 }
 
 export function normalizeDesktopSyncTopics(

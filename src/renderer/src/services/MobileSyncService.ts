@@ -16,6 +16,7 @@ import {
   applyPortableSyncImageAssets,
   buildDesktopSyncAssistantState,
   filterDesktopSyncMessageBlocks,
+  normalizeDesktopSyncExportTopics,
   normalizeDesktopSyncTopics,
   normalizePortableConversationMessages,
   type PortableSyncImageAsset,
@@ -328,36 +329,29 @@ export async function exportMobileSyncPayload(): Promise<string> {
   const messageBlocks = (await db.table('message_blocks').toArray()) as MessageBlock[]
   const files = await db.table('files').toArray()
   const avatarSetting = await db.table('settings').get('image://avatar')
-  const topicMetadata = new Map(collectTopicMetadata(currentState).map((topic) => [topic.id, topic]))
   const sourceDeviceId = getOrCreateMobileSyncSourceDeviceId()
 
   const rawMessages: Message[] = []
-  const topics: SyncTopic[] = []
-
   for (const record of topicRecords as Array<{ id: string; messages?: Message[] }>) {
-    const topic = topicMetadata.get(record.id)
     const topicMessages = sortMessages(record.messages || [])
     if (topicMessages.length === 0) {
       continue
     }
 
     rawMessages.push(...topicMessages)
-
-    if (topic) {
-      topics.push(toSyncTopic(topic))
-      continue
-    }
-
-    topics.push({
-      id: record.id,
-      assistantId: topicMessages[0]?.assistantId || 'default',
-      name: record.id,
-      createdAt: toTimestamp(topicMessages[0]?.createdAt),
-      updatedAt: toTimestamp(topicMessages.at(-1)?.updatedAt || topicMessages.at(-1)?.createdAt)
-    })
   }
 
-  const normalizedMessages = normalizePortableConversationMessages(rawMessages)
+  const normalizedTopics = normalizeDesktopSyncExportTopics({
+    assistants: [currentState.assistants.defaultAssistant, ...currentState.assistants.assistants],
+    topics: collectTopicMetadata(currentState),
+    messages: rawMessages
+  })
+  const normalizedTopicIds = new Set(normalizedTopics.map((topic) => topic.id))
+  const syncTopics = normalizedTopics.map(toSyncTopic)
+
+  const normalizedMessages = normalizePortableConversationMessages(
+    rawMessages.filter((message) => normalizedTopicIds.has(message.topicId))
+  )
   const normalizedMessageIds = new Set(normalizedMessages.map((message) => message.id))
   const normalizedMessageBlocks = messageBlocks.filter((block) => normalizedMessageIds.has(block.messageId))
 
@@ -370,8 +364,8 @@ export async function exportMobileSyncPayload(): Promise<string> {
     version: MOBILE_SYNC_SCHEMA_VERSION,
     sourcePlatform: 'desktop',
     sourceDeviceId,
-    rawTopicCount: topics.length,
-    normalizedTopicCount: topics.length,
+    rawTopicCount: new Set(rawMessages.map((message) => message.topicId)).size,
+    normalizedTopicCount: syncTopics.length,
     rawMessageCount: rawMessages.length,
     normalizedMessageCount: normalizedMessages.length,
     rawBlockCount: messageBlocks.length,
@@ -389,10 +383,10 @@ export async function exportMobileSyncPayload(): Promise<string> {
     data: {
       assistants: {
         defaultAssistant: sanitizeAssistantForSync(
-          rebuildPortableAssistantTopicsForSync(currentState.assistants.defaultAssistant, topics)
+          rebuildPortableAssistantTopicsForSync(currentState.assistants.defaultAssistant, syncTopics)
         ),
         assistants: currentState.assistants.assistants.map((assistant) =>
-          sanitizeAssistantForSync(rebuildPortableAssistantTopicsForSync(assistant, topics))
+          sanitizeAssistantForSync(rebuildPortableAssistantTopicsForSync(assistant, syncTopics))
         )
       },
       llm: {
@@ -406,7 +400,7 @@ export async function exportMobileSyncPayload(): Promise<string> {
       settings: {
         ...buildPortableSyncSettings(currentState.settings, avatarSetting?.value)
       },
-      topics,
+      topics: syncTopics,
       messages: normalizedMessages.map(toSyncMessage),
       messageBlocks: normalizedMessageBlocks.map(toSyncMessageBlock),
       portableImageAssets
