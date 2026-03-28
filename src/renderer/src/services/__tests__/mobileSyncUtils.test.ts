@@ -100,6 +100,16 @@ describe('mobileSyncUtils', () => {
       [],
       [
         createMessage({
+          id: 'message-default-1',
+          assistantId: 'default',
+          topicId: 'mobile-default-topic'
+        }),
+        createMessage({
+          id: 'message-external-1',
+          assistantId: 'external-1',
+          topicId: 'mobile-external-topic'
+        }),
+        createMessage({
           id: 'message-quick-1',
           assistantId: 'external-1',
           topicId: 'mobile-external-topic-2'
@@ -173,6 +183,12 @@ describe('mobileSyncUtils', () => {
         updatedAt: '2026-03-24T00:02:00.000Z'
       })
     ])
+  })
+
+  it('drops empty topics from portable sync normalization', () => {
+    const result = normalizeDesktopSyncTopics([createTopic({ id: 'empty-topic', assistantId: 'default' })], [], [])
+
+    expect(result.topics).toEqual([])
   })
 
   it('keeps the mirrored default assistant entry in sync with the imported default avatar', () => {
@@ -300,6 +316,30 @@ describe('mobileSyncUtils', () => {
         url: 'data:image/png;base64,desktop-mobile-image'
       })
     )
+  })
+
+  it('prunes empty ghost topics during desktop reconciliation', () => {
+    const result = resolveDesktopConversationSync({
+      currentTopics: [
+        createTopic({ id: 'empty-local-topic', assistantId: 'default' }),
+        createTopic({ id: 'shared-topic', assistantId: 'default' })
+      ],
+      incomingTopics: [createTopic({ id: 'shared-topic', assistantId: 'default' })],
+      currentMessages: [createMessage({ id: 'shared-message', assistantId: 'default', topicId: 'shared-topic' })],
+      incomingMessages: [createMessage({ id: 'shared-message', assistantId: 'default', topicId: 'shared-topic' })],
+      currentMessageBlocks: [],
+      incomingMessageBlocks: [],
+      exportedAt: 20,
+      previousLedgerEntry: {
+        lastImportedExportedAt: 10,
+        topicIds: ['shared-topic'],
+        messageIds: ['shared-message'],
+        blockIds: []
+      }
+    })
+
+    expect(result.deletedTopicIds).toEqual(['empty-local-topic'])
+    expect(result.topics.map((topic) => topic.id)).toEqual(['shared-topic'])
   })
 
   it('collapses fold-selected assistant alternatives into a single portable snapshot response', () => {

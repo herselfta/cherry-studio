@@ -112,6 +112,15 @@ function sanitizeAssistantForSync(assistant: Assistant): Assistant {
   }
 }
 
+function rebuildPortableAssistantTopicsForSync(assistant: Assistant, topics: SyncTopic[]): Assistant {
+  return {
+    ...assistant,
+    topics: topics
+      .filter((topic) => topic.assistantId === assistant.id)
+      .map((topic) => ({ ...topic, messages: [] as never[] })) as unknown as Topic[]
+  }
+}
+
 function toTimestamp(value: string | number | undefined): number {
   if (typeof value === 'number') {
     return value
@@ -240,6 +249,10 @@ function buildDesktopConversationSnapshot(
   for (const record of topicRecords) {
     const topic = topicMetadata.get(record.id)
     const topicMessages = sortMessages(record.messages || [])
+    if (topicMessages.length === 0) {
+      continue
+    }
+
     messages.push(...topicMessages)
 
     if (topic) {
@@ -324,6 +337,10 @@ export async function exportMobileSyncPayload(): Promise<string> {
   for (const record of topicRecords as Array<{ id: string; messages?: Message[] }>) {
     const topic = topicMetadata.get(record.id)
     const topicMessages = sortMessages(record.messages || [])
+    if (topicMessages.length === 0) {
+      continue
+    }
+
     rawMessages.push(...topicMessages)
 
     if (topic) {
@@ -371,8 +388,12 @@ export async function exportMobileSyncPayload(): Promise<string> {
     exportedAt: Date.now(),
     data: {
       assistants: {
-        defaultAssistant: sanitizeAssistantForSync(currentState.assistants.defaultAssistant),
-        assistants: currentState.assistants.assistants.map(sanitizeAssistantForSync)
+        defaultAssistant: sanitizeAssistantForSync(
+          rebuildPortableAssistantTopicsForSync(currentState.assistants.defaultAssistant, topics)
+        ),
+        assistants: currentState.assistants.assistants.map((assistant) =>
+          sanitizeAssistantForSync(rebuildPortableAssistantTopicsForSync(assistant, topics))
+        )
       },
       llm: {
         providers: currentState.llm.providers
