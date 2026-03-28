@@ -1,3 +1,4 @@
+import * as crypto from 'crypto'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 import sharp from 'sharp'
@@ -8,6 +9,11 @@ type SourceKind = 'apps' | 'models' | 'providers'
 type SourceEntry = {
   light?: string
   dark?: string
+}
+
+type TargetOverride = {
+  kind: SourceKind
+  baseName: string
 }
 
 const DESKTOP_ROOT = path.resolve(__dirname, '..')
@@ -164,6 +170,59 @@ async function buildSourceIndex(sourceDirectory: string): Promise<Map<string, So
   return index
 }
 
+async function hashFile(filePath: string): Promise<string> {
+  const fileBuffer = await fs.readFile(filePath)
+  return crypto.createHash('sha1').update(fileBuffer).digest('hex')
+}
+
+async function buildConflictingTargetOverrides(
+  indices: Record<SourceKind, Map<string, SourceEntry>>
+): Promise<Record<Variant, Record<string, TargetOverride>>> {
+  const overrides: Record<Variant, Record<string, TargetOverride>> = {
+    dark: {},
+    light: {}
+  }
+
+  const sharedBaseNames = [...indices.models.keys()].filter((baseName) => indices.providers.has(baseName)).sort()
+
+  for (const baseName of sharedBaseNames) {
+    const modelEntry = indices.models.get(baseName)
+    const providerEntry = indices.providers.get(baseName)
+
+    if (!modelEntry || !providerEntry) {
+      continue
+    }
+
+    const modelPaths = [modelEntry.light, modelEntry.dark].filter(Boolean) as string[]
+    const providerPaths = [providerEntry.light, providerEntry.dark].filter(Boolean) as string[]
+
+    if (modelPaths.length === 0 || providerPaths.length === 0) {
+      continue
+    }
+
+    const modelHashes = new Set(await Promise.all(modelPaths.map(hashFile)))
+    const providerHashes = new Set(await Promise.all(providerPaths.map(hashFile)))
+    const hasSharedAsset = [...modelHashes].some((hash) => providerHashes.has(hash))
+
+    if (hasSharedAsset) {
+      continue
+    }
+
+    for (const variant of ['dark', 'light'] as const) {
+      overrides[variant][`${baseName}-model.png`] = {
+        kind: 'models',
+        baseName
+      }
+      overrides[variant][`${baseName}-provider.png`] = {
+        kind: 'providers',
+        baseName
+      }
+    }
+  }
+
+  return overrides
+}
+
 function buildCandidateNames(targetBaseName: string): string[] {
   return [targetBaseName, ...(TARGET_NAME_ALIASES[targetBaseName] ?? [])]
 }
@@ -201,6 +260,26 @@ function resolveSourceForTarget(
   return undefined
 }
 
+function resolveOverriddenSource(
+  targetFileName: string,
+  variant: Variant,
+  indices: Record<SourceKind, Map<string, SourceEntry>>,
+  targetOverrides: Record<Variant, Record<string, TargetOverride>>
+): string | undefined {
+  const override = targetOverrides[variant][targetFileName]
+  if (!override) {
+    return undefined
+  }
+
+  const entry = indices[override.kind].get(override.baseName)
+  if (!entry) {
+    return undefined
+  }
+
+  const exactVariantPath = variant === 'dark' ? entry.dark : entry.light
+  return exactVariantPath ?? entry.light ?? entry.dark
+}
+
 async function syncTargetFile(sourcePath: string, targetPath: string): Promise<void> {
   const targetExt = path.extname(targetPath).toLowerCase()
   const sourceExt = path.extname(sourcePath).toLowerCase()
@@ -223,21 +302,26 @@ async function ensureDirectory(directoryPath: string): Promise<void> {
 async function syncVariant(
   variant: Variant,
   appRoot: string,
-  indices: Record<SourceKind, Map<string, SourceEntry>>
+  indices: Record<SourceKind, Map<string, SourceEntry>>,
+  targetOverrides: Record<Variant, Record<string, TargetOverride>>
 ): Promise<{ synced: string[]; skipped: string[] }> {
   const targetDirectory = path.join(appRoot, `src/assets/images/llmIcons/${variant}`)
   await ensureDirectory(targetDirectory)
 
   const targetFiles = (await fs.readdir(targetDirectory))
     .filter((fileName) => ['.png', '.webp'].includes(path.extname(fileName).toLowerCase()))
-    .sort()
+    .concat(Object.keys(targetOverrides[variant]))
+
+  const uniqueTargetFiles = [...new Set(targetFiles)].sort()
 
   const synced: string[] = []
   const skipped: string[] = []
 
-  for (const targetFileName of targetFiles) {
+  for (const targetFileName of uniqueTargetFiles) {
     const targetBaseName = path.basename(targetFileName, path.extname(targetFileName))
-    const sourcePath = resolveSourceForTarget(targetBaseName, variant, indices)
+    const sourcePath =
+      resolveOverriddenSource(targetFileName, variant, indices, targetOverrides) ??
+      resolveSourceForTarget(targetBaseName, variant, indices)
 
     if (!sourcePath) {
       skipped.push(targetFileName)
@@ -259,9 +343,10 @@ async function main(): Promise<void> {
     models: await buildSourceIndex(SOURCE_DIRECTORIES.models),
     providers: await buildSourceIndex(SOURCE_DIRECTORIES.providers)
   }
+  const targetOverrides = await buildConflictingTargetOverrides(indices)
 
-  const darkResult = await syncVariant('dark', appRoot, indices)
-  const lightResult = await syncVariant('light', appRoot, indices)
+  const darkResult = await syncVariant('dark', appRoot, indices, targetOverrides)
+  const lightResult = await syncVariant('light', appRoot, indices, targetOverrides)
   const skipped = [...new Set([...darkResult.skipped, ...lightResult.skipped])].sort()
 
   console.log(`Synced ${darkResult.synced.length} dark icon(s) and ${lightResult.synced.length} light icon(s) to:`)
