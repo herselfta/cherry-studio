@@ -520,4 +520,38 @@ describe('mobileSyncUtils', () => {
       expect.objectContaining({ id: 'moved-topic' })
     ])
   })
+
+  it('treats incoming top-level topics as canonical for rename and assistant migration metadata', () => {
+    const result = resolveDesktopConversationSync({
+      currentTopics: [
+        createTopic({
+          id: 'shared-topic',
+          assistantId: 'assistant-a',
+          name: 'desktop title should lose',
+          updatedAt: '2026-03-24T00:10:00.000Z'
+        })
+      ],
+      incomingTopics: [
+        createTopic({
+          id: 'shared-topic',
+          assistantId: 'assistant-b',
+          name: 'incoming renamed title',
+          updatedAt: '2026-03-24T00:01:00.000Z'
+        })
+      ],
+      currentMessages: [createMessage({ id: 'shared-message', assistantId: 'assistant-a', topicId: 'shared-topic' })],
+      incomingMessages: [createMessage({ id: 'shared-message', assistantId: 'assistant-b', topicId: 'shared-topic' })],
+      currentMessageBlocks: [],
+      incomingMessageBlocks: [],
+      exportedAt: 20
+    })
+
+    expect(result.topics).toEqual([
+      expect.objectContaining({
+        id: 'shared-topic',
+        assistantId: 'assistant-b',
+        name: 'incoming renamed title'
+      })
+    ])
+  })
 })

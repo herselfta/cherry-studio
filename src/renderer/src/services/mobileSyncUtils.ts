@@ -374,7 +374,9 @@ export function resolveDesktopConversationSync({
     }
   }
   for (const topic of incomingTopics) {
-    topicMap.set(topic.id, pickNewerEntity(topicMap.get(topic.id), topic))
+    // Portable sync treats top-level incoming topics as the canonical source of topic metadata.
+    // Always let imported title / assistant ownership override the local copy for the same topic id.
+    topicMap.set(topic.id, topic)
   }
 
   const finalTopicIds = new Set(topicMap.keys())
