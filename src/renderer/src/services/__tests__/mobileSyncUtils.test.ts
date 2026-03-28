@@ -1,10 +1,10 @@
 import type { Assistant, Topic } from '@renderer/types'
 import {
   AssistantMessageStatus,
-  MessageBlockStatus,
-  MessageBlockType,
   type Message,
   type MessageBlock,
+  MessageBlockStatus,
+  MessageBlockType
 } from '@renderer/types/newMessage'
 import { describe, expect, it } from 'vitest'
 
@@ -207,6 +207,72 @@ describe('mobileSyncUtils', () => {
       expect.objectContaining({
         name: 'Mobile Default',
         avatar: 'data:image/png;base64,mobile-default-avatar'
+      })
+    )
+  })
+
+  it('preserves per-assistant runtime model fields from the imported mobile payload', () => {
+    const runtimeModel = {
+      id: 'mobile-runtime-model',
+      provider: 'openrouter',
+      name: 'Mobile Runtime Model',
+      group: 'chat'
+    }
+    const assistantDefaultModel = {
+      id: 'mobile-assistant-default-model',
+      provider: 'anthropic',
+      name: 'Mobile Assistant Default Model',
+      group: 'assistant-default'
+    }
+    const mobileDefaultAssistantModel = {
+      id: 'mobile-default-assistant-model',
+      provider: 'openai',
+      name: 'Mobile Default Assistant Model',
+      group: 'default'
+    }
+
+    const result = buildDesktopSyncAssistantState({
+      currentDefaultAssistant: createAssistant({
+        id: 'default',
+        name: 'Desktop Default',
+        topics: []
+      }),
+      currentAssistants: [
+        createAssistant({
+          id: 'external-1',
+          name: 'Desktop External',
+          topics: []
+        })
+      ],
+      incomingDefaultAssistant: createAssistant({
+        id: 'default',
+        name: 'Mobile Default',
+        model: mobileDefaultAssistantModel,
+        defaultModel: mobileDefaultAssistantModel,
+        topics: []
+      }),
+      incomingAssistants: [
+        createAssistant({
+          id: 'external-1',
+          name: 'Imported External',
+          model: runtimeModel,
+          defaultModel: assistantDefaultModel,
+          topics: []
+        })
+      ],
+      normalizedTopics: []
+    })
+
+    expect(result.defaultAssistant).toEqual(
+      expect.objectContaining({
+        model: mobileDefaultAssistantModel,
+        defaultModel: mobileDefaultAssistantModel
+      })
+    )
+    expect(result.assistants.find((assistant) => assistant.id === 'external-1')).toEqual(
+      expect.objectContaining({
+        model: runtimeModel,
+        defaultModel: assistantDefaultModel
       })
     )
   })
