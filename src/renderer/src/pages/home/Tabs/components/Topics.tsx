@@ -33,6 +33,7 @@ import {
   exportTopicToNotion,
   topicToMarkdown
 } from '@renderer/utils/export'
+import { DEFAULT_TOPIC_SORT_MODE, sortTopics,type TopicSortMode } from '@renderer/utils/topicSort'
 import type { MenuProps } from 'antd'
 import { Dropdown, Tooltip } from 'antd'
 import type { ItemType, MenuItemType } from 'antd/es/menu/interface'
@@ -63,49 +64,7 @@ import styled from 'styled-components'
 
 import { TopicManagePanel, useTopicManageMode } from './TopicManageMode'
 
-type TopicSortMode = 'manual' | 'updatedAt' | 'createdAt'
-
 const TOPIC_SORT_MODE_STORAGE_KEY = 'cherry-studio.topic-sort-mode'
-
-function getTopicSortTimestamp(topic: Topic, sortMode: Exclude<TopicSortMode, 'manual'>) {
-  return new Date(topic[sortMode]).getTime()
-}
-
-function sortTopicGroup(topics: Topic[], sortMode: TopicSortMode) {
-  if (sortMode === 'manual') {
-    return topics
-  }
-
-  return [...topics].sort((left, right) => {
-    const timestampDiff = getTopicSortTimestamp(right, sortMode) - getTopicSortTimestamp(left, sortMode)
-    if (timestampDiff !== 0) {
-      return timestampDiff
-    }
-
-    const updatedDiff = new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
-    if (updatedDiff !== 0) {
-      return updatedDiff
-    }
-
-    const createdDiff = new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-    if (createdDiff !== 0) {
-      return createdDiff
-    }
-
-    return left.name.localeCompare(right.name)
-  })
-}
-
-function sortTopicsForSidebar(topics: Topic[], sortMode: TopicSortMode, pinTopicsToTop: boolean) {
-  if (!pinTopicsToTop) {
-    return sortTopicGroup(topics, sortMode)
-  }
-
-  const pinnedTopics = topics.filter((topic) => topic.pinned)
-  const unpinnedTopics = topics.filter((topic) => !topic.pinned)
-
-  return [...sortTopicGroup(pinnedTopics, sortMode), ...sortTopicGroup(unpinnedTopics, sortMode)]
-}
 
 function readTopicSortMode(): TopicSortMode {
   const storedMode = localStorage.getItem(TOPIC_SORT_MODE_STORAGE_KEY)
@@ -117,7 +76,7 @@ function readTopicSortMode(): TopicSortMode {
   // Default to updated time so freshly imported mobile topics land near the top instead
   // of silently sinking to the bottom just because the raw assistant.topic array order
   // happened to append them last during cross-device restore.
-  return 'updatedAt'
+  return DEFAULT_TOPIC_SORT_MODE
 }
 
 interface Props {
@@ -594,7 +553,10 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
   ])
 
   const sortedTopics = useMemo(() => {
-    return sortTopicsForSidebar(assistant.topics, topicSortMode, pinTopicsToTop)
+    return sortTopics(assistant.topics, {
+      sortMode: topicSortMode,
+      pinTopicsToTop
+    })
   }, [assistant.topics, pinTopicsToTop, topicSortMode])
 
   // Filter topics based on search text (only in manage mode)

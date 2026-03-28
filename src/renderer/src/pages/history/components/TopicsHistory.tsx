@@ -3,15 +3,14 @@ import { VStack } from '@renderer/components/Layout'
 import useScrollPosition from '@renderer/hooks/useScrollPosition'
 import { selectAllTopics } from '@renderer/store/assistants'
 import type { Topic } from '@renderer/types'
+import { sortTopics, type TopicTimeSortMode } from '@renderer/utils/topicSort'
 import { Button, Divider, Empty, Segmented } from 'antd'
 import dayjs from 'dayjs'
-import { groupBy, isEmpty, orderBy } from 'lodash'
+import { groupBy, isEmpty } from 'lodash'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
 import styled from 'styled-components'
-
-type SortType = 'createdAt' | 'updatedAt'
 
 type Props = {
   keywords: string
@@ -22,7 +21,7 @@ type Props = {
 const TopicsHistory: React.FC<Props> = ({ keywords, onClick, onSearch, ...props }) => {
   const { t } = useTranslation()
   const { handleScroll, containerRef } = useScrollPosition('TopicsHistory')
-  const [sortType, setSortType] = useState<SortType>('createdAt')
+  const [sortType, setSortType] = useState<TopicTimeSortMode>('createdAt')
 
   // FIXME: db 中没有 topic.name 等信息，只能从 store 获取
   const topics = useSelector(selectAllTopics)
@@ -31,7 +30,11 @@ const TopicsHistory: React.FC<Props> = ({ keywords, onClick, onSearch, ...props 
     return topic.name.toLowerCase().includes(keywords.toLowerCase())
   })
 
-  const groupedTopics = groupBy(orderBy(filteredTopics, sortType, 'desc'), (topic) => {
+  const sortedTopics = sortTopics(filteredTopics, {
+    sortMode: sortType
+  })
+
+  const groupedTopics = groupBy(sortedTopics, (topic) => {
     return dayjs(topic[sortType]).format('MM/DD')
   })
 
@@ -54,7 +57,7 @@ const TopicsHistory: React.FC<Props> = ({ keywords, onClick, onSearch, ...props 
         shape="round"
         size="small"
         value={sortType}
-        onChange={setSortType}
+        onChange={(value) => setSortType(value as TopicTimeSortMode)}
         options={[
           { label: t('export.created'), value: 'createdAt' },
           { label: t('export.last_updated'), value: 'updatedAt' }
