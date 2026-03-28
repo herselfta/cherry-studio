@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import {
   applyPortableSyncImageAssets,
   buildDesktopSyncAssistantState,
+  normalizePortableConversationMessages,
   normalizeDesktopSyncTopics,
   resolveDesktopConversationSync
 } from '../mobileSyncUtils'
@@ -299,6 +300,66 @@ describe('mobileSyncUtils', () => {
         url: 'data:image/png;base64,desktop-mobile-image'
       })
     )
+  })
+
+  it('collapses fold-selected assistant alternatives into a single portable snapshot response', () => {
+    const userMessage = createMessage({
+      id: 'user-message',
+      assistantId: 'default',
+      topicId: 'topic-1',
+      role: 'user',
+      createdAt: '2026-03-24T00:00:10.000Z'
+    })
+    const oldAssistantMessage = createMessage({
+      id: 'assistant-old',
+      assistantId: 'default',
+      topicId: 'topic-1',
+      askId: 'user-message',
+      createdAt: '2026-03-24T00:00:20.000Z',
+      foldSelected: false
+    })
+    const selectedAssistantMessage = createMessage({
+      id: 'assistant-selected',
+      assistantId: 'default',
+      topicId: 'topic-1',
+      askId: 'user-message',
+      createdAt: '2026-03-24T00:00:30.000Z',
+      foldSelected: true
+    })
+
+    expect(
+      normalizePortableConversationMessages([userMessage, oldAssistantMessage, selectedAssistantMessage]).map(
+        (message) => message.id
+      )
+    ).toEqual(['user-message', 'assistant-selected'])
+  })
+
+  it('keeps multi-model assistant responses when no fold selection state exists', () => {
+    const userMessage = createMessage({
+      id: 'user-message',
+      assistantId: 'default',
+      topicId: 'topic-1',
+      role: 'user',
+      createdAt: '2026-03-24T00:00:10.000Z'
+    })
+    const assistantA = createMessage({
+      id: 'assistant-a',
+      assistantId: 'default',
+      topicId: 'topic-1',
+      askId: 'user-message',
+      createdAt: '2026-03-24T00:00:20.000Z'
+    })
+    const assistantB = createMessage({
+      id: 'assistant-b',
+      assistantId: 'default',
+      topicId: 'topic-1',
+      askId: 'user-message',
+      createdAt: '2026-03-24T00:00:30.000Z'
+    })
+
+    expect(
+      normalizePortableConversationMessages([userMessage, assistantA, assistantB]).map((message) => message.id)
+    ).toEqual(['user-message', 'assistant-a', 'assistant-b'])
   })
 
   it('keeps local-only conversations while deleting entities previously seen from the same source device', () => {

@@ -16,9 +16,11 @@ import {
   applyPortableSyncImageAssets,
   buildDesktopSyncAssistantState,
   filterDesktopSyncMessageBlocks,
+  normalizePortableConversationMessages,
   normalizeDesktopSyncTopics,
   type PortableSyncImageAsset,
-  resolveDesktopConversationSync} from './mobileSyncUtils'
+  resolveDesktopConversationSync
+} from './mobileSyncUtils'
 
 const logger = loggerService.withContext('MobileSyncService')
 
@@ -316,13 +318,13 @@ export async function exportMobileSyncPayload(): Promise<string> {
   const topicMetadata = new Map(collectTopicMetadata(currentState).map((topic) => [topic.id, topic]))
   const sourceDeviceId = getOrCreateMobileSyncSourceDeviceId()
 
-  const messages: SyncMessage[] = []
+  const rawMessages: Message[] = []
   const topics: SyncTopic[] = []
 
   for (const record of topicRecords as Array<{ id: string; messages?: Message[] }>) {
     const topic = topicMetadata.get(record.id)
     const topicMessages = sortMessages(record.messages || [])
-    messages.push(...topicMessages.map(toSyncMessage))
+    rawMessages.push(...topicMessages)
 
     if (topic) {
       topics.push(toSyncTopic(topic))
@@ -338,8 +340,12 @@ export async function exportMobileSyncPayload(): Promise<string> {
     })
   }
 
+  const normalizedMessages = normalizePortableConversationMessages(rawMessages)
+  const normalizedMessageIds = new Set(normalizedMessages.map((message) => message.id))
+  const normalizedMessageBlocks = messageBlocks.filter((block) => normalizedMessageIds.has(block.messageId))
+
   const portableImageAssets = (await buildPortableImageAssets({
-    message_blocks: messageBlocks,
+    message_blocks: normalizedMessageBlocks,
     files
   } as Record<string, any>)) as PortableImageAsset[]
 
@@ -367,8 +373,8 @@ export async function exportMobileSyncPayload(): Promise<string> {
         ...buildPortableSyncSettings(currentState.settings, avatarSetting?.value)
       },
       topics,
-      messages,
-      messageBlocks: messageBlocks.map(toSyncMessageBlock),
+      messages: normalizedMessages.map(toSyncMessage),
+      messageBlocks: normalizedMessageBlocks.map(toSyncMessageBlock),
       portableImageAssets
     }
   }

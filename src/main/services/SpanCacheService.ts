@@ -62,15 +62,14 @@ class SpanCacheService implements TraceCache {
     await this._checkFolder(path.join(this.fileDir, topicId))
 
     if (modelName) {
-      this.cleanHistoryTrace(topicId, traceId || '', modelName)
-      this.saveSpans(topicId)
+      await this.cleanHistoryTrace(topicId, traceId || '', modelName)
+      await this.saveSpans(topicId)
     } else if (traceId) {
-      fs.rm(path.join(this.fileDir, topicId, traceId))
+      await fs.rm(path.join(this.fileDir, topicId, traceId), { recursive: true, force: true })
     } else {
-      fs.readdir(path.join(this.fileDir, topicId)).then((files) =>
-        files.forEach((file) => {
-          fs.rm(path.join(this.fileDir, topicId, file))
-        })
+      const files = await fs.readdir(path.join(this.fileDir, topicId))
+      await Promise.all(
+        files.map((file) => fs.rm(path.join(this.fileDir, topicId, file), { recursive: true, force: true }))
       )
     }
   }
@@ -205,7 +204,7 @@ class SpanCacheService implements TraceCache {
     }
 
     if (!modelName) {
-      await fs.rm(filePath, { recursive: true })
+      await fs.rm(filePath, { recursive: true, force: true })
     } else {
       const allSpans = await this._getHisData(topicId, traceId)
       allSpans.forEach((span) => {
@@ -214,7 +213,7 @@ class SpanCacheService implements TraceCache {
         }
       })
       try {
-        await fs.rm(filePath, { recursive: true })
+        await fs.rm(filePath, { recursive: true, force: true })
       } catch (error) {
         logger.error('Error cleaning local data:', error as Error)
       }
@@ -389,6 +388,9 @@ class SpanCacheService implements TraceCache {
       await fs.access(filePath)
       return true
     } catch (err) {
+      if (typeof err === 'object' && err && 'code' in err && err.code === 'ENOENT') {
+        return false
+      }
       logger.error('delete trace file error:', err as Error)
       return false
     }
