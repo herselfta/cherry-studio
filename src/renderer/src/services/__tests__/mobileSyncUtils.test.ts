@@ -11,8 +11,8 @@ import { describe, expect, it } from 'vitest'
 import {
   applyPortableSyncImageAssets,
   buildDesktopSyncAssistantState,
-  normalizePortableConversationMessages,
   normalizeDesktopSyncTopics,
+  normalizePortableConversationMessages,
   resolveDesktopConversationSync
 } from '../mobileSyncUtils'
 

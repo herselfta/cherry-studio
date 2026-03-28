@@ -154,6 +154,60 @@ function sanitizePersistedReduxState(value: string): string {
   })
 }
 
+function restoreNonPortablePersistedSettings(
+  incomingPersistedReduxState: string,
+  currentPersistedReduxState: string | null
+): string {
+  const sanitizedIncomingState = sanitizePersistedReduxState(incomingPersistedReduxState)
+  const incomingPersistedState = readSerializedJson(sanitizedIncomingState)
+  const currentPersistedState = readSerializedJson(currentPersistedReduxState)
+
+  if (!incomingPersistedState || typeof incomingPersistedState !== 'object') {
+    return sanitizedIncomingState
+  }
+
+  if (!currentPersistedState || typeof currentPersistedState !== 'object') {
+    return sanitizedIncomingState
+  }
+
+  const incomingSerializedSettings = (incomingPersistedState as Record<string, unknown>).settings
+  const currentSerializedSettings = (currentPersistedState as Record<string, unknown>).settings
+  if (typeof incomingSerializedSettings !== 'string' || typeof currentSerializedSettings !== 'string') {
+    return sanitizedIncomingState
+  }
+
+  const incomingSettingsState = readSerializedJson(incomingSerializedSettings)
+  const currentSettingsState = readSerializedJson(currentSerializedSettings)
+  if (!incomingSettingsState || typeof incomingSettingsState !== 'object') {
+    return sanitizedIncomingState
+  }
+
+  if (!currentSettingsState || typeof currentSettingsState !== 'object') {
+    return sanitizedIncomingState
+  }
+
+  const mergedSettingsState = { ...(incomingSettingsState as Record<string, unknown>) }
+  let restoredLocalOnlySetting = false
+
+  for (const key of NON_PORTABLE_PERSISTED_SETTINGS_KEYS) {
+    if (!(key in (currentSettingsState as Record<string, unknown>))) {
+      continue
+    }
+
+    mergedSettingsState[key] = (currentSettingsState as Record<string, unknown>)[key]
+    restoredLocalOnlySetting = true
+  }
+
+  if (!restoredLocalOnlySetting) {
+    return sanitizedIncomingState
+  }
+
+  return JSON.stringify({
+    ...(incomingPersistedState as Record<string, unknown>),
+    settings: JSON.stringify(mergedSettingsState)
+  })
+}
+
 function getManualSyncConfirmPreferences(storage: Storage): ManualSyncConfirmPreferences {
   const currentSchedules = parseManualSyncScheduleMap(
     readSerializedJson(storage.getItem(MANUAL_SYNC_SCHEDULE_STORAGE_KEY))
@@ -237,7 +291,10 @@ export function restoreBackupLocalStorageSnapshot(
   const persistedReduxState = snapshot[PERSISTED_REDUX_STATE_STORAGE_KEY]
 
   if (typeof persistedReduxState === 'string') {
-    storage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, sanitizePersistedReduxState(persistedReduxState))
+    storage.setItem(
+      PERSISTED_REDUX_STATE_STORAGE_KEY,
+      restoreNonPortablePersistedSettings(persistedReduxState, storage.getItem(PERSISTED_REDUX_STATE_STORAGE_KEY))
+    )
   }
 
   const manualSyncConfirmPreferences = getBackupManualSyncConfirmPreferences(snapshot)

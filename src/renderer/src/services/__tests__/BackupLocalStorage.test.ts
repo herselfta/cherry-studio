@@ -144,7 +144,20 @@ describe('BackupLocalStorage', () => {
     })
   })
 
-  it('drops local-only backup settings when restoring persisted redux state from backup snapshots', () => {
+  it('preserves existing local-only backup settings when restoring persisted redux state from backup snapshots', () => {
+    localStorage.setItem(
+      PERSISTED_REDUX_STATE_STORAGE_KEY,
+      JSON.stringify({
+        settings: JSON.stringify({
+          localBackupDir: '/Users/mac/CurrentBackups',
+          localBackupAutoSync: true,
+          localBackupSyncInterval: 45,
+          localBackupMaxBackups: 7,
+          localBackupSkipBackupFile: true
+        })
+      })
+    )
+
     restoreBackupLocalStorageSnapshot({
       [PERSISTED_REDUX_STATE_STORAGE_KEY]: JSON.stringify({
         settings: JSON.stringify({
@@ -159,7 +172,12 @@ describe('BackupLocalStorage', () => {
     })
 
     expect(parsePersistedSettingsSnapshot()).toEqual({
-      theme: 'light'
+      theme: 'light',
+      localBackupDir: '/Users/mac/CurrentBackups',
+      localBackupAutoSync: true,
+      localBackupSyncInterval: 45,
+      localBackupMaxBackups: 7,
+      localBackupSkipBackupFile: true
     })
   })
 

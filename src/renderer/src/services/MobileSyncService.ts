@@ -16,8 +16,8 @@ import {
   applyPortableSyncImageAssets,
   buildDesktopSyncAssistantState,
   filterDesktopSyncMessageBlocks,
-  normalizePortableConversationMessages,
   normalizeDesktopSyncTopics,
+  normalizePortableConversationMessages,
   type PortableSyncImageAsset,
   resolveDesktopConversationSync
 } from './mobileSyncUtils'
