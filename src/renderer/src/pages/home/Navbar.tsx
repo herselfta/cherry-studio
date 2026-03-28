@@ -119,17 +119,17 @@ const HeaderNavbar: FC<Props> = ({ activeAssistant, setActiveAssistant, activeTo
           paddingRight: '15px'
         }}
         className="home-navbar-right">
-        <HStack alignItems="center" gap={6}>
+        <ActionsGroup alignItems="center" gap={6}>
           <UpdateAppButton />
           <Tooltip title={t('chat.assistant.search.placeholder')} mouseEnterDelay={0.8}>
-            <NarrowIcon onClick={() => SearchPopup.show()}>
+            <ActionIcon onClick={() => SearchPopup.show()}>
               <Search size={18} />
-            </NarrowIcon>
+            </ActionIcon>
           </Tooltip>
           <Tooltip title={t('navbar.expand')} mouseEnterDelay={0.8}>
-            <NarrowIcon onClick={handleNarrowModeToggle}>
+            <ActionIcon onClick={handleNarrowModeToggle}>
               <i className="iconfont icon-icon-adaptive-width"></i>
-            </NarrowIcon>
+            </ActionIcon>
           </Tooltip>
           {topicPosition === 'right' && !showTopics && (
             <Tooltip title={t('navbar.show_sidebar')} mouseEnterDelay={2}>
@@ -145,16 +145,18 @@ const HeaderNavbar: FC<Props> = ({ activeAssistant, setActiveAssistant, activeTo
               </NavbarIcon>
             </Tooltip>
           )}
-        </HStack>
+        </ActionsGroup>
       </NavbarRight>
     </Navbar>
   )
 }
 
-const NarrowIcon = styled(NavbarIcon)`
-  @media (max-width: 1000px) {
-    display: none;
-  }
+const ActionsGroup = styled(HStack)`
+  flex-shrink: 0;
+`
+
+const ActionIcon = styled(NavbarIcon)`
+  flex-shrink: 0;
 `
 
 export default HeaderNavbar
