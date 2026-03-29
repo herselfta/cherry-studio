@@ -351,12 +351,13 @@ export async function exportMobileSyncPayload(): Promise<string> {
     messages: rawMessages,
     messageBlocks: messageBlocks.filter((block) => currentMessageIds.has(block.messageId))
   })
+  const activeTopicIds = new Set(Object.keys(portableSyncState.entityVersions.topics))
 
   const normalizedTopics = normalizeDesktopSyncExportTopics({
     assistants: [currentState.assistants.defaultAssistant, ...currentState.assistants.assistants],
     topics: currentTopicMetadata,
     messages: rawMessages
-  })
+  }).filter((topic) => activeTopicIds.has(topic.id))
   const normalizedTopicIds = new Set(normalizedTopics.map((topic) => topic.id))
   const syncTopics = normalizedTopics.map(toSyncTopic)
 

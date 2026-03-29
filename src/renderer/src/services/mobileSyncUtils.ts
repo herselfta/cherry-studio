@@ -110,6 +110,23 @@ function getPortableConversationGroupKey(message: Message) {
   return message.role === 'assistant' && message.askId ? `assistant:${message.askId}` : `message:${message.id}`
 }
 
+function getPortableAssistantModelKey(message: Message) {
+  return message.modelId || message.model?.id || message.assistantId
+}
+
+function shouldResolvePortableAssistantGroup(messages: Message[]) {
+  if (messages.length <= 1) {
+    return false
+  }
+
+  const hasFoldSelectionState = messages.some((message) => typeof message.foldSelected === 'boolean')
+  if (hasFoldSelectionState) {
+    return true
+  }
+
+  return new Set(messages.map(getPortableAssistantModelKey)).size <= 1
+}
+
 function resolveVisibleAssistantId(
   topic: Pick<Topic, 'assistantId' | 'createdAt' | 'updatedAt'> | undefined,
   messages: Message[],
@@ -154,8 +171,7 @@ function selectPortableAssistantMessages(messages: Message[]) {
     return messages
   }
 
-  const hasFoldSelectionState = messages.some((message) => typeof message.foldSelected === 'boolean')
-  if (!hasFoldSelectionState) {
+  if (!shouldResolvePortableAssistantGroup(messages)) {
     return messages
   }
 
