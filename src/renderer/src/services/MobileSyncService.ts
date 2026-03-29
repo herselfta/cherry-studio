@@ -7,11 +7,7 @@ import type { Message, MessageBlock } from '@renderer/types/newMessage'
 
 import { PERSISTED_REDUX_STATE_STORAGE_KEY } from './BackupLocalStorage'
 import { buildPortableImageAssets, type PortableImageAsset } from './BackupService'
-import {
-  getMobileSyncLedgerEntry,
-  getOrCreateMobileSyncSourceDeviceId,
-  writeMobileSyncLedgerEntry
-} from './mobileSyncLedger'
+import { getOrCreateMobileSyncSourceDeviceId } from './mobileSyncLedger'
 import {
   applyPortableSyncImageAssets,
   buildDesktopSyncAssistantState,
@@ -19,14 +15,20 @@ import {
   normalizeDesktopSyncExportTopics,
   normalizeDesktopSyncTopics,
   normalizePortableConversationMessages,
-  type PortableSyncImageAsset,
-  resolveDesktopConversationSync
+  type PortableSyncImageAsset
 } from './mobileSyncUtils'
+import {
+  type PortableSyncMetadata,
+  preparePortableSyncState,
+  resolvePortableSyncSnapshot,
+  toPortableSyncMetadata,
+  writePortableSyncState
+} from './portableSyncState'
 
 const logger = loggerService.withContext('MobileSyncService')
 
 export const MOBILE_SYNC_SCHEMA = 'cherry-studio-cross-device-sync'
-export const MOBILE_SYNC_SCHEMA_VERSION = 2
+export const MOBILE_SYNC_SCHEMA_VERSION = 3
 export const MOBILE_SYNC_FILE_MARKER = '.mobile-sync.'
 
 type SyncSettings = {
@@ -76,6 +78,7 @@ type MobileSyncPayload = {
   sourceDeviceId?: string
   sourcePlatform?: 'desktop' | 'mobile'
   exportedAt: number
+  sync?: PortableSyncMetadata
   data: SyncData
 }
 
@@ -341,9 +344,17 @@ export async function exportMobileSyncPayload(): Promise<string> {
     rawMessages.push(...topicMessages)
   }
 
+  const currentTopicMetadata = collectTopicMetadata(currentState)
+  const currentMessageIds = new Set(rawMessages.map((message) => message.id))
+  const portableSyncState = preparePortableSyncState({
+    topics: currentTopicMetadata,
+    messages: rawMessages,
+    messageBlocks: messageBlocks.filter((block) => currentMessageIds.has(block.messageId))
+  })
+
   const normalizedTopics = normalizeDesktopSyncExportTopics({
     assistants: [currentState.assistants.defaultAssistant, ...currentState.assistants.assistants],
-    topics: collectTopicMetadata(currentState),
+    topics: currentTopicMetadata,
     messages: rawMessages
   })
   const normalizedTopicIds = new Set(normalizedTopics.map((topic) => topic.id))
@@ -364,6 +375,7 @@ export async function exportMobileSyncPayload(): Promise<string> {
     version: MOBILE_SYNC_SCHEMA_VERSION,
     sourcePlatform: 'desktop',
     sourceDeviceId,
+    lamport: portableSyncState.lamport,
     rawTopicCount: new Set(rawMessages.map((message) => message.topicId)).size,
     normalizedTopicCount: syncTopics.length,
     rawMessageCount: rawMessages.length,
@@ -380,6 +392,7 @@ export async function exportMobileSyncPayload(): Promise<string> {
     sourceDeviceId,
     sourcePlatform: 'desktop',
     exportedAt: Date.now(),
+    sync: toPortableSyncMetadata(portableSyncState),
     data: {
       assistants: {
         defaultAssistant: sanitizeAssistantForSync(
@@ -544,14 +557,15 @@ export async function importMobileSyncPayload(payload: string) {
     userName: parsed.data.settings.userName ?? currentSettings.userName
   })
 
-  const shouldUseSourceAwareImport = parsed.version >= 2 && Boolean(parsed.sourceDeviceId)
+  const isVersionedSync = parsed.version >= 3 && Boolean(parsed.sync?.replicaId)
 
   logger.info('Importing mobile sync payload', {
     version: parsed.version,
     source: parsed.source,
     sourcePlatform: parsed.sourcePlatform,
     sourceDeviceId: parsed.sourceDeviceId,
-    sourceAware: shouldUseSourceAwareImport,
+    sourceAware: isVersionedSync,
+    replicaId: parsed.sync?.replicaId,
     rawIncomingTopicCount: parsed.data.topics.length,
     rawIncomingMessageCount: rawIncomingMessages.length,
     rawIncomingBlockCount: rawPortableMessageBlocks.length,
@@ -559,12 +573,6 @@ export async function importMobileSyncPayload(payload: string) {
     normalizedIncomingMessageCount: incomingMessages.length,
     normalizedIncomingBlockCount: portableMessageBlocks.length
   })
-
-  if (shouldUseSourceAwareImport && !getMobileSyncLedgerEntry(parsed.sourceDeviceId!)) {
-    logger.warn(
-      `First source-aware mobile sync import detected for ${parsed.sourceDeviceId}. Deletions will become active after this baseline import.`
-    )
-  }
 
   if (
     rawIncomingMessages.length !== incomingMessages.length ||
@@ -578,7 +586,7 @@ export async function importMobileSyncPayload(payload: string) {
     })
   }
 
-  if (!shouldUseSourceAwareImport) {
+  if (!isVersionedSync) {
     const { assistants: mergedAssistants, defaultAssistant: mergedDefaultAssistant } = buildDesktopSyncAssistantState({
       currentDefaultAssistant: currentAssistants.defaultAssistant,
       currentAssistants: currentAssistants.assistants,
@@ -626,20 +634,23 @@ export async function importMobileSyncPayload(payload: string) {
   } else {
     const currentTopicRecords = (await db.table('topics').toArray()) as Array<{ id: string; messages?: Message[] }>
     const currentMessageBlocks = (await db.table('message_blocks').toArray()) as MessageBlock[]
-    const currentTopicMetadata = new Map(
-      collectTopicMetadataFromAssistantState(currentAssistants).map((topic) => [topic.id, topic])
-    )
+    const currentTopics = collectTopicMetadataFromAssistantState(currentAssistants)
+    const currentTopicMetadata = new Map(currentTopics.map((topic) => [topic.id, topic]))
     const currentConversation = buildDesktopConversationSnapshot(currentTopicRecords, currentTopicMetadata)
-    const previousLedgerEntry = getMobileSyncLedgerEntry(parsed.sourceDeviceId!)
-    const resolvedConversation = resolveDesktopConversationSync({
-      currentTopics: currentConversation.topics,
+    const localSyncState = preparePortableSyncState({
+      topics: currentTopics,
+      messages: currentConversation.messages,
+      messageBlocks: currentMessageBlocks
+    })
+    const resolvedConversation = resolvePortableSyncSnapshot({
+      currentTopics,
       incomingTopics: normalizedTopics,
       currentMessages: currentConversation.messages,
       incomingMessages,
       currentMessageBlocks,
       incomingMessageBlocks: portableMessageBlocks,
-      exportedAt: parsed.exportedAt,
-      previousLedgerEntry
+      localState: localSyncState,
+      incomingSync: parsed.sync!
     })
     const { assistants: syncedAssistants, defaultAssistant: syncedDefaultAssistant } = buildDesktopSyncAssistantState({
       currentDefaultAssistant: currentAssistants.defaultAssistant,
@@ -691,29 +702,16 @@ export async function importMobileSyncPayload(payload: string) {
         })
       }
     })
-
-    if (!resolvedConversation.isStaleImport && resolvedConversation.nextLedgerEntry) {
-      writeMobileSyncLedgerEntry(parsed.sourceDeviceId!, resolvedConversation.nextLedgerEntry)
-    } else if (resolvedConversation.isStaleImport) {
-      logger.warn(
-        `Skipping destructive mobile sync actions for stale payload from ${parsed.sourceDeviceId} exported at ${parsed.exportedAt}`
-      )
-    }
+    writePortableSyncState(resolvedConversation.syncState)
 
     if (resolvedConversation.deletedTopicIds.length > 0) {
-      logger.info(
-        `Deleted ${resolvedConversation.deletedTopicIds.length} topic(s) from mobile sync snapshot reconciliation`
-      )
+      logger.info(`Deleted ${resolvedConversation.deletedTopicIds.length} topic(s) from versioned mobile sync`)
     }
     if (resolvedConversation.deletedMessageIds.length > 0) {
-      logger.info(
-        `Deleted ${resolvedConversation.deletedMessageIds.length} message(s) from mobile sync snapshot reconciliation`
-      )
+      logger.info(`Deleted ${resolvedConversation.deletedMessageIds.length} message(s) from versioned mobile sync`)
     }
     if (resolvedConversation.deletedBlockIds.length > 0) {
-      logger.info(
-        `Deleted ${resolvedConversation.deletedBlockIds.length} block(s) from mobile sync snapshot reconciliation`
-      )
+      logger.info(`Deleted ${resolvedConversation.deletedBlockIds.length} block(s) from versioned mobile sync`)
     }
   }
 

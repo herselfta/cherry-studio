@@ -5,6 +5,7 @@ const logger = loggerService.withContext('MobileSyncLedger')
 
 export const MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY = 'mobile_sync_source_device_id'
 export const MOBILE_SYNC_LEDGER_STORAGE_KEY = 'mobile_sync_ledger_v2'
+export const MOBILE_SYNC_GLOBAL_LEDGER_STORAGE_KEY = 'mobile_sync_global_ledger_v3'
 
 export type MobileSyncLedgerEntry = {
   lastImportedExportedAt: number
@@ -64,4 +65,22 @@ export function writeMobileSyncLedgerEntry(
   const ledger = readMobileSyncLedger(storage)
   ledger[sourceDeviceId] = normalizeLedgerEntry(entry)
   storage.setItem(MOBILE_SYNC_LEDGER_STORAGE_KEY, JSON.stringify(ledger))
+}
+
+export function getLatestMobileSyncLedgerEntry(storage: Storage = localStorage): MobileSyncLedgerEntry | undefined {
+  const serialized = storage.getItem(MOBILE_SYNC_GLOBAL_LEDGER_STORAGE_KEY)
+  if (!serialized) {
+    return undefined
+  }
+
+  try {
+    return normalizeLedgerEntry(JSON.parse(serialized) as MobileSyncLedgerEntry)
+  } catch (error) {
+    logger.warn('Failed to parse global mobile sync ledger', error as Error)
+    return undefined
+  }
+}
+
+export function writeLatestMobileSyncLedgerEntry(entry: MobileSyncLedgerEntry, storage: Storage = localStorage) {
+  storage.setItem(MOBILE_SYNC_GLOBAL_LEDGER_STORAGE_KEY, JSON.stringify(normalizeLedgerEntry(entry)))
 }

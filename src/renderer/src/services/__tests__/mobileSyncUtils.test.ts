@@ -556,6 +556,82 @@ describe('mobileSyncUtils', () => {
     )
   })
 
+  it('treats mobile package imports as full snapshots on first desktop import', () => {
+    const result = resolveDesktopConversationSync({
+      currentTopics: [
+        createTopic({ id: 'shared-topic', assistantId: 'default' }),
+        createTopic({ id: 'desktop-only-topic', assistantId: 'default' })
+      ],
+      incomingTopics: [createTopic({ id: 'shared-topic', assistantId: 'default' })],
+      currentMessages: [
+        createMessage({
+          id: 'user-message',
+          assistantId: 'default',
+          topicId: 'shared-topic',
+          role: 'user',
+          updatedAt: '2026-03-24T00:01:00.000Z'
+        }),
+        createMessage({
+          id: 'assistant-old',
+          assistantId: 'default',
+          topicId: 'shared-topic',
+          askId: 'user-message',
+          updatedAt: '2026-03-24T00:02:00.000Z'
+        }),
+        createMessage({
+          id: 'desktop-only-message',
+          assistantId: 'default',
+          topicId: 'desktop-only-topic',
+          updatedAt: '2026-03-24T00:03:00.000Z'
+        })
+      ],
+      incomingMessages: [
+        createMessage({
+          id: 'user-message',
+          assistantId: 'default',
+          topicId: 'shared-topic',
+          role: 'user',
+          updatedAt: '2026-03-24T00:04:00.000Z'
+        }),
+        createMessage({
+          id: 'assistant-new',
+          assistantId: 'default',
+          topicId: 'shared-topic',
+          askId: 'user-message',
+          updatedAt: '2026-03-24T00:05:00.000Z'
+        })
+      ],
+      currentMessageBlocks: [
+        createImageBlock({ id: 'old-block', messageId: 'assistant-old' }),
+        createImageBlock({ id: 'desktop-only-block', messageId: 'desktop-only-message' })
+      ],
+      incomingMessageBlocks: [createImageBlock({ id: 'new-block', messageId: 'assistant-new' })],
+      exportedAt: 20,
+      treatIncomingAsFullSnapshot: true
+    })
+
+    expect(result.isStaleImport).toBe(false)
+    expect(result.deletedTopicIds).toEqual(['desktop-only-topic'])
+    expect(result.deletedMessageIds).toEqual(expect.arrayContaining(['assistant-old', 'desktop-only-message']))
+    expect(result.deletedBlockIds).toEqual(expect.arrayContaining(['old-block', 'desktop-only-block']))
+    expect(result.topics).toEqual([expect.objectContaining({ id: 'shared-topic' })])
+    expect(result.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'user-message', updatedAt: '2026-03-24T00:04:00.000Z' }),
+        expect.objectContaining({ id: 'assistant-new' })
+      ])
+    )
+    expect(result.messages.map((message) => message.id)).not.toContain('assistant-old')
+    expect(result.nextLedgerEntry).toEqual(
+      expect.objectContaining({
+        lastImportedExportedAt: 20,
+        topicIds: ['shared-topic'],
+        messageIds: ['user-message', 'assistant-new'],
+        blockIds: ['new-block']
+      })
+    )
+  })
+
   it('downgrades stale imports to non-destructive merge mode', () => {
     const result = resolveDesktopConversationSync({
       currentTopics: [
@@ -579,6 +655,41 @@ describe('mobileSyncUtils', () => {
         messageIds: ['previously-synced-message'],
         blockIds: ['previously-synced-block']
       }
+    })
+
+    expect(result.isStaleImport).toBe(true)
+    expect(result.deletedTopicIds).toEqual([])
+    expect(result.deletedMessageIds).toEqual([])
+    expect(result.deletedBlockIds).toEqual([])
+    expect(result.topics.map((topic) => topic.id)).toEqual(
+      expect.arrayContaining(['local-topic', 'previously-synced-topic'])
+    )
+  })
+
+  it('keeps stale mobile snapshot imports non-destructive even in full snapshot mode', () => {
+    const result = resolveDesktopConversationSync({
+      currentTopics: [
+        createTopic({ id: 'local-topic', assistantId: 'default' }),
+        createTopic({ id: 'previously-synced-topic', assistantId: 'default' })
+      ],
+      incomingTopics: [createTopic({ id: 'local-topic', assistantId: 'default' })],
+      currentMessages: [
+        createMessage({ id: 'local-message', assistantId: 'default', topicId: 'local-topic' }),
+        createMessage({ id: 'previously-synced-message', assistantId: 'default', topicId: 'previously-synced-topic' })
+      ],
+      incomingMessages: [createMessage({ id: 'local-message', assistantId: 'default', topicId: 'local-topic' })],
+      currentMessageBlocks: [
+        createImageBlock({ id: 'previously-synced-block', messageId: 'previously-synced-message' })
+      ],
+      incomingMessageBlocks: [],
+      exportedAt: 5,
+      previousLedgerEntry: {
+        lastImportedExportedAt: 10,
+        topicIds: ['previously-synced-topic'],
+        messageIds: ['previously-synced-message'],
+        blockIds: ['previously-synced-block']
+      },
+      treatIncomingAsFullSnapshot: true
     })
 
     expect(result.isStaleImport).toBe(true)

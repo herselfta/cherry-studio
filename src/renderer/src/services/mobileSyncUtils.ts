@@ -38,6 +38,7 @@ type ResolveDesktopConversationSyncParams = {
   incomingMessageBlocks: MessageBlock[]
   exportedAt: number
   previousLedgerEntry?: MobileSyncLedgerEntry
+  treatIncomingAsFullSnapshot?: boolean
 }
 
 type ResolveDesktopConversationSyncResult = {
@@ -445,12 +446,79 @@ export function resolveDesktopConversationSync({
   currentMessageBlocks,
   incomingMessageBlocks,
   exportedAt,
-  previousLedgerEntry
+  previousLedgerEntry,
+  treatIncomingAsFullSnapshot = false
 }: ResolveDesktopConversationSyncParams): ResolveDesktopConversationSyncResult {
   const incomingTopicIds = new Set(incomingTopics.map((topic) => topic.id))
   const incomingMessageIds = new Set(incomingMessages.map((message) => message.id))
   const incomingBlockIds = new Set(incomingMessageBlocks.map((block) => block.id))
   const isStaleImport = Boolean(previousLedgerEntry && exportedAt <= previousLedgerEntry.lastImportedExportedAt)
+
+  if (treatIncomingAsFullSnapshot && !isStaleImport) {
+    const topicMap = new Map<string, Topic>(incomingTopics.map((topic) => [topic.id, topic]))
+    const messageMap = new Map<string, Message>()
+
+    for (const message of incomingMessages) {
+      if (topicMap.has(message.topicId)) {
+        messageMap.set(message.id, message)
+      }
+    }
+
+    const topicIdsWithMessages = new Set(Array.from(messageMap.values()).map((message) => message.topicId))
+    const prunedEmptyTopicIds = Array.from(topicMap.keys()).filter((topicId) => !topicIdsWithMessages.has(topicId))
+    for (const topicId of prunedEmptyTopicIds) {
+      topicMap.delete(topicId)
+    }
+
+    const finalTopicIds = new Set(topicMap.keys())
+    const deletedTopicIds = Array.from(
+      new Set([
+        ...currentTopics.filter((topic) => !finalTopicIds.has(topic.id)).map((topic) => topic.id),
+        ...prunedEmptyTopicIds
+      ])
+    )
+
+    const finalMessageIds = new Set(messageMap.keys())
+    const deletedMessageIds = Array.from(
+      new Set(
+        currentMessages
+          .filter((message) => !finalMessageIds.has(message.id) || !finalTopicIds.has(message.topicId))
+          .map((message) => message.id)
+      )
+    )
+
+    const blockMap = new Map<string, MessageBlock>()
+    for (const block of incomingMessageBlocks) {
+      if (finalMessageIds.has(block.messageId)) {
+        blockMap.set(block.id, block)
+      }
+    }
+
+    const finalBlockIds = new Set(blockMap.keys())
+    const deletedBlockIds = Array.from(
+      new Set(
+        currentMessageBlocks
+          .filter((block) => !finalBlockIds.has(block.id) || !finalMessageIds.has(block.messageId))
+          .map((block) => block.id)
+      )
+    )
+
+    return {
+      topics: Array.from(topicMap.values()),
+      messages: Array.from(messageMap.values()),
+      messageBlocks: Array.from(blockMap.values()),
+      deletedTopicIds,
+      deletedMessageIds,
+      deletedBlockIds,
+      isStaleImport: false,
+      nextLedgerEntry: {
+        lastImportedExportedAt: exportedAt,
+        topicIds: Array.from(finalTopicIds),
+        messageIds: Array.from(finalMessageIds),
+        blockIds: Array.from(finalBlockIds)
+      }
+    }
+  }
 
   const ledgerDeletedTopicIds = isStaleImport
     ? []
