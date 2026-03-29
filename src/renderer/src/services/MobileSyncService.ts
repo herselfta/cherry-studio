@@ -638,11 +638,15 @@ export async function importMobileSyncPayload(payload: string) {
     const currentTopics = collectTopicMetadataFromAssistantState(currentAssistants)
     const currentTopicMetadata = new Map(currentTopics.map((topic) => [topic.id, topic]))
     const currentConversation = buildDesktopConversationSnapshot(currentTopicRecords, currentTopicMetadata)
-    const localSyncState = preparePortableSyncState({
-      topics: currentTopics,
-      messages: currentConversation.messages,
-      messageBlocks: currentMessageBlocks
-    })
+    const localSyncState = preparePortableSyncState(
+      {
+        topics: currentTopics,
+        messages: currentConversation.messages,
+        messageBlocks: currentMessageBlocks
+      },
+      localStorage,
+      parsed.sync!.frontier
+    )
     const resolvedConversation = resolvePortableSyncSnapshot({
       currentTopics,
       incomingTopics: normalizedTopics,
