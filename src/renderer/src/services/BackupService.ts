@@ -4,8 +4,9 @@ import { upgradeToV7, upgradeToV8 } from '@renderer/databases/upgrades'
 import i18n from '@renderer/i18n'
 import store from '@renderer/store'
 import { setLocalBackupSyncState, setS3SyncState, setWebDAVSyncState } from '@renderer/store/backup'
-import type { FileMetadata, S3Config, WebDavConfig } from '@renderer/types'
+import type { FileMetadata, S3Config, Topic, WebDavConfig } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
+import type { Message, MessageBlock } from '@renderer/types/newMessage'
 import { uuid } from '@renderer/utils'
 import dayjs from 'dayjs'
 
@@ -22,6 +23,7 @@ import {
   restoreBackupLocalStorageSnapshot
 } from './BackupLocalStorage'
 import { NotificationService } from './NotificationService'
+import { preparePortableSyncState, toPortableSyncMetadata } from './portableSyncState'
 
 const logger = loggerService.withContext('BackupService')
 
@@ -1091,17 +1093,37 @@ export async function buildPortableImageAssets(
 export async function getBackupData() {
   const indexedDB = await backupDatabase()
   const portableImageAssets = await buildPortableImageAssets(indexedDB)
+  const currentTopics = (indexedDB.topics || []) as Array<{ id: string; messages?: Message[] }>
+  const currentMessages = currentTopics.flatMap((topic) => topic.messages || [])
+  const currentMessageIds = new Set(currentMessages.map((message) => message.id))
+  const portableSyncState = preparePortableSyncState({
+    topics: collectTopicsFromBackupStore(),
+    messages: currentMessages,
+    messageBlocks: ((indexedDB.message_blocks || []) as MessageBlock[]).filter((block) =>
+      currentMessageIds.has(block.messageId)
+    )
+  })
 
   return JSON.stringify({
     time: new Date().getTime(),
     version: BACKUP_LOCAL_STORAGE_VERSION,
     localStorage: createBackupLocalStorageSnapshot(),
     indexedDB,
+    portableSync: toPortableSyncMetadata(portableSyncState),
     // Desktop migration zips previously only carried image references (file IDs /
     // desktop paths). Mobile restore needs the actual bytes, so we inline the
     // message-linked image assets here while keeping the legacy JSON layout intact.
     portableImageAssets
   })
+}
+
+function collectTopicsFromBackupStore() {
+  const currentState = store.getState()
+
+  return [
+    currentState.assistants.defaultAssistant,
+    ...currentState.assistants.assistants
+  ].flatMap((assistant) => assistant.topics || []) as Topic[]
 }
 
 /************************************* Backup Utils ************************************** */
