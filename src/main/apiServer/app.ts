@@ -11,6 +11,7 @@ import { agentsRoutes } from './routes/agents'
 import { chatRoutes } from './routes/chat'
 import { mcpRoutes } from './routes/mcp'
 import { messagesProviderRoutes, messagesRoutes } from './routes/messages'
+import { mobileSyncRoutes } from './routes/mobileSync'
 import { modelsRoutes } from './routes/models'
 
 const logger = loggerService.withContext('ApiServer')
@@ -130,6 +131,8 @@ app.get('/', (_req, res) => {
       mcps: 'GET /v1/mcps',
       mcp_server: 'GET /v1/mcps/:server_id',
       mcp_proxy: 'ALL /v1/mcps/:server_id/mcp',
+      mobile_sync_pull: 'GET /v1/mobile-sync/pull',
+      mobile_sync_push: 'POST /v1/mobile-sync/push',
       agents: 'GET /v1/agents',
       agent_sessions: 'GET /v1/agents/:agentId/sessions',
       session_messages: 'GET /v1/agents/:agentId/sessions/:sessionId/messages'
@@ -151,6 +154,7 @@ apiRouter.use('/chat', chatRoutes)
 apiRouter.use('/mcps', mcpRoutes)
 apiRouter.use('/messages', extendMessagesTimeout, messagesRoutes)
 apiRouter.use('/models', modelsRoutes)
+apiRouter.use('/mobile-sync', mobileSyncRoutes)
 apiRouter.use('/agents', agentsRoutes)
 app.use('/v1', apiRouter)
 

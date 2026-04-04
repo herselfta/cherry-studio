@@ -3,6 +3,7 @@ import { loggerService } from '@logger'
 
 import { startAutoBackup } from './services/BackupService'
 import { startManualSyncSchedules } from './services/ManualSyncScheduleService'
+import { mobileOnlineSyncBridgeService } from './services/MobileOnlineSyncBridgeService'
 import { startNutstoreAutoBackup } from './services/NutstoreService'
 import storeSyncService from './services/StoreSyncService'
 import { webTraceService } from './services/WebTraceService'
@@ -37,7 +38,12 @@ function initWebTrace() {
   webTraceService.init()
 }
 
+function initMobileOnlineSyncBridge() {
+  mobileOnlineSyncBridgeService.init()
+}
+
 initKeyv()
 initAutoBackup()
 initStoreSync()
 initWebTrace()
+initMobileOnlineSyncBridge()

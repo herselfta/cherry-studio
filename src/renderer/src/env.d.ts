@@ -2,6 +2,7 @@
 
 import type { PermissionUpdate } from '@anthropic-ai/claude-agent-sdk'
 import type KeyvStorage from '@kangfenmao/keyv-storage'
+import type { MobileOnlineSyncSnapshot } from '@shared/mobileSync/onlineSync'
 import type { HookAPI } from 'antd/es/modal/useModal'
 import type { NavigateFunction } from 'react-router-dom'
 
@@ -53,6 +54,16 @@ declare global {
         message?: string
         updatedPermissions?: PermissionUpdate[]
       }) => Promise<{ success: boolean }>
+    }
+    __CHERRY_MOBILE_ONLINE_SYNC_BRIDGE__?: {
+      collectSnapshot: () => Promise<MobileOnlineSyncSnapshot>
+      applySnapshot: (snapshot: MobileOnlineSyncSnapshot) => Promise<{
+        assistantCount: number
+        topicCount: number
+        messageCount: number
+        blockCount: number
+        nextTopicId: string | null
+      }>
     }
   }
 }
