@@ -82,6 +82,22 @@ function createBlock(messageId: string, id = `block:${messageId}`) {
   }
 }
 
+function stripUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefinedDeep(item)) as T
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).flatMap(([key, childValue]) =>
+        childValue === undefined ? [] : [[key, stripUndefinedDeep(childValue)]]
+      )
+    ) as T
+  }
+
+  return value
+}
+
 describe('portableSyncState', () => {
   it('preserves local-only topics when the incoming snapshot simply has not seen them', () => {
     const localStorage = createMemoryStorage()
@@ -367,6 +383,105 @@ describe('portableSyncState', () => {
     ])
     expect(result.deletedMessageIds).toEqual([])
     expect(result.deletedBlockIds).toEqual([])
+  })
+
+  it('treats omitted optional fields as the same fingerprint when merging newer remote edits', () => {
+    const localStorage = createMemoryStorage()
+    localStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'desktop-a')
+    const remoteStorage = createMemoryStorage()
+    remoteStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'mobile-b')
+
+    const baseTopic = createTopic({ id: 'shared-topic', assistantId: 'default' })
+    const baseMessage = {
+      ...createMessage({
+        id: 'shared-message',
+        assistantId: 'default',
+        topicId: baseTopic.id,
+        content: 'original content'
+      }),
+      modelId: undefined,
+      mentions: undefined
+    } satisfies Message
+    const baseBlock = {
+      ...createBlock(baseMessage.id, 'shared-block'),
+      content: 'original block',
+      updatedAt: undefined,
+      file: undefined
+    } satisfies MessageBlock
+
+    preparePortableSyncState(
+      {
+        topics: [baseTopic],
+        messages: [baseMessage],
+        messageBlocks: [baseBlock]
+      },
+      localStorage
+    )
+
+    preparePortableSyncState(
+      {
+        topics: [stripUndefinedDeep(baseTopic)],
+        messages: [stripUndefinedDeep(baseMessage)],
+        messageBlocks: [stripUndefinedDeep(baseBlock)]
+      },
+      remoteStorage
+    )
+
+    const remoteTopic = createTopic({
+      ...stripUndefinedDeep(baseTopic),
+      name: 'mobile renamed topic',
+      updatedAt: '2026-03-29T00:03:00.000Z'
+    })
+    const remoteMessage = createMessage({
+      ...stripUndefinedDeep(baseMessage),
+      content: 'mobile newer content',
+      updatedAt: '2026-03-29T00:03:00.000Z'
+    })
+    const remoteBlock = {
+      ...stripUndefinedDeep(baseBlock),
+      content: 'mobile newer block',
+      updatedAt: '2026-03-29T00:03:00.000Z'
+    } satisfies MessageBlock
+    const remoteState = preparePortableSyncState(
+      {
+        topics: [remoteTopic],
+        messages: [remoteMessage],
+        messageBlocks: [remoteBlock]
+      },
+      remoteStorage
+    )
+
+    const currentLocalTopic = stripUndefinedDeep(baseTopic)
+    const currentLocalMessage = stripUndefinedDeep(baseMessage)
+    const currentLocalBlock = stripUndefinedDeep(baseBlock)
+    const localState = preparePortableSyncState(
+      {
+        topics: [currentLocalTopic],
+        messages: [currentLocalMessage],
+        messageBlocks: [currentLocalBlock]
+      },
+      localStorage,
+      toPortableSyncMetadata(remoteState).frontier
+    )
+
+    const result = resolvePortableSyncSnapshot({
+      currentTopics: [currentLocalTopic],
+      incomingTopics: [remoteTopic],
+      currentMessages: [currentLocalMessage],
+      incomingMessages: [remoteMessage],
+      currentMessageBlocks: [currentLocalBlock],
+      incomingMessageBlocks: [remoteBlock],
+      localState,
+      incomingSync: toPortableSyncMetadata(remoteState)
+    })
+
+    expect(result.topics).toEqual([expect.objectContaining({ id: 'shared-topic', name: 'mobile renamed topic' })])
+    expect(result.messages).toEqual([
+      expect.objectContaining({ id: 'shared-message', content: 'mobile newer content' })
+    ])
+    expect(result.messageBlocks).toEqual([
+      expect.objectContaining({ id: 'shared-block', content: 'mobile newer block' })
+    ])
   })
 
   it('suppresses stale assistant responses when a newer slot winner exists on another replica', () => {
