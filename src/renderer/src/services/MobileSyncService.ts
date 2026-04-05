@@ -246,6 +246,14 @@ function buildPortableEntityMergeSamples<T extends { id: string }>(params: {
   }))
 }
 
+function stringifyPortableSyncDebug(value: unknown) {
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return '[unserializable]'
+  }
+}
+
 function toDesktopTopics(topics: Topic[] | SyncTopic[] | undefined): Topic[] {
   return (topics || []).map((topic) => toDesktopTopic(topic as SyncTopic))
 }
@@ -623,6 +631,46 @@ export async function importMobileSyncPayload(payload: string) {
     normalizedIncomingBlockCount: portableMessageBlocks.length,
     logToMain: true
   })
+  logger.info(
+    `Importing mobile sync payload summary ${stringifyPortableSyncDebug({
+      version: parsed.version,
+      source: parsed.source,
+      sourcePlatform: parsed.sourcePlatform,
+      sourceDeviceId: parsed.sourceDeviceId,
+      sourceAware: isVersionedSync,
+      replicaId: parsed.sync?.replicaId,
+      rawIncomingTopicCount: parsed.data.topics.length,
+      rawIncomingMessageCount: rawIncomingMessages.length,
+      rawIncomingBlockCount: rawPortableMessageBlocks.length,
+      normalizedIncomingTopicCount: normalizedTopics.length,
+      normalizedIncomingMessageCount: incomingMessages.length,
+      normalizedIncomingBlockCount: portableMessageBlocks.length,
+      topicPreview: normalizedTopics.slice(0, 8).map((topic) => ({
+        id: topic.id,
+        name: topic.name,
+        assistantId: topic.assistantId,
+        updatedAt: topic.updatedAt
+      })),
+      messagePreview: incomingMessages.slice(0, 8).map((message) => ({
+        id: message.id,
+        topicId: message.topicId,
+        role: message.role,
+        updatedAt: message.updatedAt,
+        content: previewPortableValue((message as Message & { content?: string }).content)
+      })),
+      blockPreview: portableMessageBlocks.slice(0, 8).map((block) => ({
+        id: block.id,
+        messageId: block.messageId,
+        type: block.type,
+        updatedAt: block.updatedAt,
+        content: previewPortableValue((block as MessageBlock & { content?: string }).content)
+      })),
+      tombstoneTopicIds: Object.keys(parsed.sync?.tombstones.topics || {}).slice(0, 8),
+      tombstoneMessageIds: Object.keys(parsed.sync?.tombstones.messages || {}).slice(0, 8),
+      tombstoneBlockIds: Object.keys(parsed.sync?.tombstones.blocks || {}).slice(0, 8)
+    })}`,
+    { logToMain: true }
+  )
 
   if (
     rawIncomingMessages.length !== incomingMessages.length ||
@@ -768,6 +816,55 @@ export async function importMobileSyncPayload(payload: string) {
       }),
       logToMain: true
     })
+    logger.info(
+      `Versioned mobile sync merge samples ${stringifyPortableSyncDebug({
+        sourceDeviceId: parsed.sourceDeviceId,
+        replicaId: parsed.sync?.replicaId,
+        isBootstrapImport,
+        topicSamples: buildPortableEntityMergeSamples({
+          current: currentTopics,
+          incoming: normalizedTopics,
+          resolved: resolvedConversation.topics,
+          localVersions: localSyncState.entityVersions.topics,
+          incomingVersions: parsed.sync!.entityVersions.topics,
+          tombstones: parsed.sync!.tombstones.topics,
+          summarize: (topic) => ({
+            name: topic.name,
+            assistantId: topic.assistantId,
+            updatedAt: topic.updatedAt
+          })
+        }),
+        messageSamples: buildPortableEntityMergeSamples({
+          current: currentConversation.messages,
+          incoming: incomingMessages,
+          resolved: resolvedConversation.messages,
+          localVersions: localSyncState.entityVersions.messages,
+          incomingVersions: parsed.sync!.entityVersions.messages,
+          tombstones: parsed.sync!.tombstones.messages,
+          summarize: (message) => ({
+            topicId: message.topicId,
+            role: message.role,
+            updatedAt: message.updatedAt,
+            content: previewPortableValue((message as Message & { content?: string }).content)
+          })
+        }),
+        blockSamples: buildPortableEntityMergeSamples({
+          current: currentMessageBlocks,
+          incoming: portableMessageBlocks,
+          resolved: resolvedConversation.messageBlocks,
+          localVersions: localSyncState.entityVersions.blocks,
+          incomingVersions: parsed.sync!.entityVersions.blocks,
+          tombstones: parsed.sync!.tombstones.blocks,
+          summarize: (block) => ({
+            messageId: block.messageId,
+            type: block.type,
+            updatedAt: block.updatedAt,
+            content: previewPortableValue((block as MessageBlock & { content?: string }).content)
+          })
+        })
+      })}`,
+      { logToMain: true }
+    )
     const { assistants: syncedAssistants, defaultAssistant: syncedDefaultAssistant } = buildDesktopSyncAssistantState({
       currentDefaultAssistant: currentAssistants.defaultAssistant,
       currentAssistants: currentAssistants.assistants,
