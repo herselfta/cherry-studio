@@ -18,8 +18,11 @@ import {
   type PortableSyncImageAsset
 } from './mobileSyncUtils'
 import {
+  bootstrapPortableSyncState,
+  hasPortableSyncHistory,
   type PortableSyncMetadata,
   preparePortableSyncState,
+  readPortableSyncState,
   resolvePortableSyncSnapshot,
   toPortableSyncMetadata,
   writePortableSyncState
@@ -635,18 +638,31 @@ export async function importMobileSyncPayload(payload: string) {
   } else {
     const currentTopicRecords = (await db.table('topics').toArray()) as Array<{ id: string; messages?: Message[] }>
     const currentMessageBlocks = (await db.table('message_blocks').toArray()) as MessageBlock[]
-    const currentTopics = collectTopicMetadataFromAssistantState(currentAssistants)
-    const currentTopicMetadata = new Map(currentTopics.map((topic) => [topic.id, topic]))
+    const currentAssistantTopics = collectTopicMetadataFromAssistantState(currentAssistants)
+    const currentTopicMetadata = new Map(currentAssistantTopics.map((topic) => [topic.id, topic]))
     const currentConversation = buildDesktopConversationSnapshot(currentTopicRecords, currentTopicMetadata)
-    const localSyncState = preparePortableSyncState(
-      {
-        topics: currentTopics,
-        messages: currentConversation.messages,
-        messageBlocks: currentMessageBlocks
-      },
-      localStorage,
-      parsed.sync!.frontier
-    )
+    const currentTopics = currentConversation.topics
+    const currentSnapshot = {
+      topics: currentTopics,
+      messages: currentConversation.messages,
+      messageBlocks: currentMessageBlocks
+    }
+    const existingSyncState = readPortableSyncState(localStorage)
+    const isBootstrapImport = !hasPortableSyncHistory(existingSyncState)
+    const localSyncState = isBootstrapImport
+      ? bootstrapPortableSyncState(currentSnapshot, parsed.sync!, localStorage)
+      : preparePortableSyncState(currentSnapshot, localStorage, parsed.sync!.frontier)
+
+    if (isBootstrapImport) {
+      logger.info('Bootstrapped portable sync lineage from incoming mobile sync payload', {
+        sourceDeviceId: parsed.sourceDeviceId,
+        replicaId: parsed.sync?.replicaId,
+        topicCount: currentTopics.length,
+        messageCount: currentConversation.messages.length,
+        blockCount: currentMessageBlocks.length
+      })
+    }
+
     const resolvedConversation = resolvePortableSyncSnapshot({
       currentTopics,
       incomingTopics: normalizedTopics,
@@ -655,7 +671,8 @@ export async function importMobileSyncPayload(payload: string) {
       currentMessageBlocks,
       incomingMessageBlocks: portableMessageBlocks,
       localState: localSyncState,
-      incomingSync: parsed.sync!
+      incomingSync: parsed.sync!,
+      preferIncomingOnEqualVersion: isBootstrapImport
     })
     const { assistants: syncedAssistants, defaultAssistant: syncedDefaultAssistant } = buildDesktopSyncAssistantState({
       currentDefaultAssistant: currentAssistants.defaultAssistant,

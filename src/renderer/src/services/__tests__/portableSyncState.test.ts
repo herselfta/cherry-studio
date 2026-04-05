@@ -2,7 +2,12 @@ import type { Topic } from '@renderer/types'
 import { AssistantMessageStatus, type Message, MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
 import { describe, expect, it, vi } from 'vitest'
 
-import { preparePortableSyncState, resolvePortableSyncSnapshot, toPortableSyncMetadata } from '../portableSyncState'
+import {
+  bootstrapPortableSyncState,
+  preparePortableSyncState,
+  resolvePortableSyncSnapshot,
+  toPortableSyncMetadata
+} from '../portableSyncState'
 
 vi.mock('../mobileSyncLedger', () => ({
   MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY: 'mobile_sync_source_device_id',
@@ -185,6 +190,113 @@ describe('portableSyncState', () => {
 
     expect(result.topics).toEqual([])
     expect(result.deletedTopicIds).toEqual(['shared-topic'])
+  })
+
+  it('bootstraps missing sync history so remote tombstones still delete tracked topics', () => {
+    const sharedTopic = createTopic({ id: 'shared-topic', assistantId: 'default' })
+
+    const localStorage = createMemoryStorage()
+    localStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'desktop-a')
+    const remoteStorage = createMemoryStorage()
+    remoteStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'mobile-b')
+
+    preparePortableSyncState(
+      {
+        topics: [sharedTopic],
+        messages: [],
+        messageBlocks: []
+      },
+      remoteStorage
+    )
+    const remoteDeletionState = preparePortableSyncState(
+      {
+        topics: [],
+        messages: [],
+        messageBlocks: []
+      },
+      remoteStorage
+    )
+    const localState = bootstrapPortableSyncState(
+      {
+        topics: [sharedTopic],
+        messages: [],
+        messageBlocks: []
+      },
+      toPortableSyncMetadata(remoteDeletionState),
+      localStorage
+    )
+
+    const result = resolvePortableSyncSnapshot({
+      currentTopics: [sharedTopic],
+      incomingTopics: [],
+      currentMessages: [],
+      incomingMessages: [],
+      currentMessageBlocks: [],
+      incomingMessageBlocks: [],
+      localState,
+      incomingSync: toPortableSyncMetadata(remoteDeletionState),
+      preferIncomingOnEqualVersion: true
+    })
+
+    expect(result.topics).toEqual([])
+    expect(result.deletedTopicIds).toEqual(['shared-topic'])
+  })
+
+  it('prefers incoming tracked topic metadata on version tie during bootstrap recovery', () => {
+    const localStorage = createMemoryStorage()
+    localStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'desktop-a')
+    const remoteStorage = createMemoryStorage()
+    remoteStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'mobile-b')
+
+    const localTopic = createTopic({
+      id: 'shared-topic',
+      assistantId: 'default',
+      name: 'desktop stale title'
+    })
+    const remoteTopic = createTopic({
+      id: 'shared-topic',
+      assistantId: 'default',
+      name: 'mobile newer title'
+    })
+    const sharedMessage = createMessage({
+      id: 'shared-message',
+      assistantId: 'default',
+      topicId: 'shared-topic',
+      role: 'user'
+    })
+    const sharedBlock = createBlock(sharedMessage.id)
+
+    const remoteState = preparePortableSyncState(
+      {
+        topics: [remoteTopic],
+        messages: [sharedMessage],
+        messageBlocks: [sharedBlock]
+      },
+      remoteStorage
+    )
+    const localState = bootstrapPortableSyncState(
+      {
+        topics: [localTopic],
+        messages: [sharedMessage],
+        messageBlocks: [sharedBlock]
+      },
+      toPortableSyncMetadata(remoteState),
+      localStorage
+    )
+
+    const result = resolvePortableSyncSnapshot({
+      currentTopics: [localTopic],
+      incomingTopics: [remoteTopic],
+      currentMessages: [sharedMessage],
+      incomingMessages: [sharedMessage],
+      currentMessageBlocks: [sharedBlock],
+      incomingMessageBlocks: [sharedBlock],
+      localState,
+      incomingSync: toPortableSyncMetadata(remoteState),
+      preferIncomingOnEqualVersion: true
+    })
+
+    expect(result.topics).toEqual([expect.objectContaining({ id: 'shared-topic', name: 'mobile newer title' })])
   })
 
   it('ignores topic versions that no longer have a normalized incoming topic entity', () => {
