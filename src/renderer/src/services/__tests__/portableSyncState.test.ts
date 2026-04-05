@@ -171,6 +171,42 @@ describe('portableSyncState', () => {
     expect(result.deletedTopicIds).toEqual(['shared-topic'])
   })
 
+  it('ignores topic versions that no longer have a normalized incoming topic entity', () => {
+    const remoteStorage = createMemoryStorage()
+    remoteStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'mobile-b')
+
+    const remoteTopic = createTopic({ id: 'filtered-topic', assistantId: 'default' })
+    const remoteState = preparePortableSyncState(
+      {
+        topics: [remoteTopic],
+        messages: [],
+        messageBlocks: []
+      },
+      remoteStorage
+    )
+
+    const result = resolvePortableSyncSnapshot({
+      currentTopics: [],
+      incomingTopics: [],
+      currentMessages: [],
+      incomingMessages: [],
+      currentMessageBlocks: [],
+      incomingMessageBlocks: [],
+      localState: preparePortableSyncState(
+        {
+          topics: [],
+          messages: [],
+          messageBlocks: []
+        },
+        createMemoryStorage()
+      ),
+      incomingSync: toPortableSyncMetadata(remoteState)
+    })
+
+    expect(result.topics).toEqual([])
+    expect(result.deletedTopicIds).toEqual([])
+  })
+
   it('drops remotely tracked empty ghost topics but keeps local-only empty topics', () => {
     const localStorage = createMemoryStorage()
     localStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'desktop-a')
@@ -245,6 +281,92 @@ describe('portableSyncState', () => {
     expect(result.deletedTopicIds).not.toContain('local-only-topic')
     expect(result.deletedMessageIds).toContain('shared-message')
     expect(result.deletedBlockIds).toContain(sharedBlock.id)
+  })
+
+  it('keeps newer local message and block content when an older incoming payload replays the same ids', () => {
+    const localStorage = createMemoryStorage()
+    localStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'desktop-a')
+    const remoteStorage = createMemoryStorage()
+    remoteStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'mobile-b')
+
+    const topic = createTopic({ id: 'shared-topic', assistantId: 'default' })
+    const originalMessage = createMessage({
+      id: 'shared-message',
+      assistantId: 'default',
+      topicId: topic.id,
+      content: 'original content'
+    })
+    const originalBlock = {
+      ...createBlock(originalMessage.id, 'shared-block'),
+      content: 'original block'
+    }
+    const updatedLocalMessage = createMessage({
+      ...originalMessage,
+      content: 'desktop newer content',
+      updatedAt: '2026-03-29T00:03:00.000Z'
+    })
+    const updatedLocalBlock = {
+      ...originalBlock,
+      content: 'desktop newer block',
+      updatedAt: '2026-03-29T00:03:00.000Z'
+    } satisfies MessageBlock
+
+    preparePortableSyncState(
+      {
+        topics: [topic],
+        messages: [originalMessage],
+        messageBlocks: [originalBlock]
+      },
+      localStorage
+    )
+
+    preparePortableSyncState(
+      {
+        topics: [topic],
+        messages: [originalMessage],
+        messageBlocks: [originalBlock]
+      },
+      remoteStorage
+    )
+
+    const localState = preparePortableSyncState(
+      {
+        topics: [topic],
+        messages: [updatedLocalMessage],
+        messageBlocks: [updatedLocalBlock]
+      },
+      localStorage
+    )
+    const incomingSync = toPortableSyncMetadata(
+      preparePortableSyncState(
+        {
+          topics: [topic],
+          messages: [originalMessage],
+          messageBlocks: [originalBlock]
+        },
+        remoteStorage
+      )
+    )
+
+    const result = resolvePortableSyncSnapshot({
+      currentTopics: [topic],
+      incomingTopics: [topic],
+      currentMessages: [updatedLocalMessage],
+      incomingMessages: [originalMessage],
+      currentMessageBlocks: [updatedLocalBlock],
+      incomingMessageBlocks: [originalBlock],
+      localState,
+      incomingSync
+    })
+
+    expect(result.messages).toEqual([
+      expect.objectContaining({ id: 'shared-message', content: 'desktop newer content' })
+    ])
+    expect(result.messageBlocks).toEqual([
+      expect.objectContaining({ id: 'shared-block', content: 'desktop newer block' })
+    ])
+    expect(result.deletedMessageIds).toEqual([])
+    expect(result.deletedBlockIds).toEqual([])
   })
 
   it('suppresses stale assistant responses when a newer slot winner exists on another replica', () => {

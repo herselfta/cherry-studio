@@ -587,18 +587,20 @@ export function resolvePortableSyncSnapshot({
     const localVersion = localState.entityVersions.topics[topicId]
     const remoteVersion = incomingSync.entityVersions.topics[topicId]
     const tombstoneVersion = mergedTombstones.topics[topicId]
+    const localTopic = currentTopicMap.get(topicId)
+    const remoteTopic = incomingTopicMap.get(topicId)
 
-    const localActive = comparePortableSyncVersions(localVersion, tombstoneVersion) > 0
-    const remoteActive = comparePortableSyncVersions(remoteVersion, tombstoneVersion) > 0
+    const localActive = Boolean(localTopic) && comparePortableSyncVersions(localVersion, tombstoneVersion) > 0
+    const remoteActive = Boolean(remoteTopic) && comparePortableSyncVersions(remoteVersion, tombstoneVersion) > 0
 
     if (localActive && (!remoteActive || comparePortableSyncVersions(localVersion, remoteVersion) >= 0)) {
-      topicMap.set(topicId, currentTopicMap.get(topicId)!)
+      topicMap.set(topicId, localTopic!)
       topicVersions[topicId] = localVersion!
       continue
     }
 
     if (remoteActive) {
-      topicMap.set(topicId, incomingTopicMap.get(topicId)!)
+      topicMap.set(topicId, remoteTopic!)
       topicVersions[topicId] = remoteVersion!
     }
   }
@@ -611,14 +613,29 @@ export function resolvePortableSyncSnapshot({
   )
   const mergedBlockVersions = mergeVersionMaps(localState.entityVersions.blocks, incomingSync.entityVersions.blocks)
 
-  const messageInputMap = new Map<string, Message>([
-    ...currentMessages.map((message) => [message.id, message]),
-    ...incomingMessages.map((message) => [message.id, message])
-  ])
-  const blockInputMap = new Map<string, MessageBlock>([
-    ...currentMessageBlocks.map((block) => [block.id, block]),
-    ...incomingMessageBlocks.map((block) => [block.id, block])
-  ])
+  const messageInputMap = new Map<string, Message>()
+  for (const message of currentMessages) {
+    messageInputMap.set(message.id, message)
+  }
+  for (const message of incomingMessages) {
+    const localVersion = localState.entityVersions.messages[message.id]
+    const remoteVersion = incomingSync.entityVersions.messages[message.id]
+    if (!localVersion || !remoteVersion || comparePortableSyncVersions(remoteVersion, localVersion) >= 0) {
+      messageInputMap.set(message.id, message)
+    }
+  }
+
+  const blockInputMap = new Map<string, MessageBlock>()
+  for (const block of currentMessageBlocks) {
+    blockInputMap.set(block.id, block)
+  }
+  for (const block of incomingMessageBlocks) {
+    const localVersion = localState.entityVersions.blocks[block.id]
+    const remoteVersion = incomingSync.entityVersions.blocks[block.id]
+    if (!localVersion || !remoteVersion || comparePortableSyncVersions(remoteVersion, localVersion) >= 0) {
+      blockInputMap.set(block.id, block)
+    }
+  }
 
   const { result: mergedMessages, acceptedVersions: messageVersions } = buildMessageMap(
     Array.from(messageInputMap.values()),
