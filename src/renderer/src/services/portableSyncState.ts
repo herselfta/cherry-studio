@@ -531,6 +531,36 @@ function buildBlockMap(
   return { result, acceptedVersions }
 }
 
+function pruneGhostTopics(
+  topicMap: Map<string, Topic>,
+  topicVersions: PortableSyncVersionMap,
+  messages: Map<string, Message>,
+  incomingSync: PortableSyncMetadata,
+  localReplicaId: string
+) {
+  const topicIdsWithMessages = new Set(Array.from(messages.values()).map((message) => message.topicId))
+
+  for (const [topicId] of topicMap.entries()) {
+    if (topicIdsWithMessages.has(topicId)) {
+      continue
+    }
+
+    const topicVersion = topicVersions[topicId]
+    const touchedByIncomingReplica = Boolean(
+      incomingSync.entityVersions.topics[topicId] || incomingSync.tombstones.topics[topicId]
+    )
+    const isLocalOnlyUntouchedTopic =
+      Boolean(topicVersion) && topicVersion.replicaId === localReplicaId && !touchedByIncomingReplica
+
+    if (isLocalOnlyUntouchedTopic) {
+      continue
+    }
+
+    topicMap.delete(topicId)
+    delete topicVersions[topicId]
+  }
+}
+
 export function resolvePortableSyncSnapshot({
   currentTopics,
   incomingTopics,
@@ -625,6 +655,8 @@ export function resolvePortableSyncSnapshot({
     mergedMessages.delete(messageId)
     delete messageVersions[messageId]
   }
+
+  pruneGhostTopics(topicMap, topicVersions, mergedMessages, incomingSync, localState.replicaId)
 
   const finalMessageIds = new Set(mergedMessages.keys())
   const { result: mergedBlocks, acceptedVersions: blockVersions } = buildBlockMap(

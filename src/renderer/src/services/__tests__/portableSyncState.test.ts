@@ -171,6 +171,82 @@ describe('portableSyncState', () => {
     expect(result.deletedTopicIds).toEqual(['shared-topic'])
   })
 
+  it('drops remotely tracked empty ghost topics but keeps local-only empty topics', () => {
+    const localStorage = createMemoryStorage()
+    localStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'desktop-a')
+    const remoteStorage = createMemoryStorage()
+    remoteStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'mobile-b')
+
+    const sharedTopic = createTopic({ id: 'shared-topic', assistantId: 'default', name: 'shared topic' })
+    const locallyRetitledSharedTopic = createTopic({
+      id: 'shared-topic',
+      assistantId: 'default',
+      name: 'locally retitled topic',
+      updatedAt: '2026-03-29T00:03:00.000Z'
+    })
+    const localOnlyTopic = createTopic({ id: 'local-only-topic', assistantId: 'default', name: 'local empty topic' })
+    const sharedMessage = createMessage({
+      id: 'shared-message',
+      assistantId: 'default',
+      topicId: 'shared-topic',
+      role: 'user'
+    })
+    const sharedBlock = createBlock(sharedMessage.id)
+
+    preparePortableSyncState(
+      {
+        topics: [sharedTopic],
+        messages: [sharedMessage],
+        messageBlocks: [sharedBlock]
+      },
+      localStorage
+    )
+
+    preparePortableSyncState(
+      {
+        topics: [sharedTopic],
+        messages: [sharedMessage],
+        messageBlocks: [sharedBlock]
+      },
+      remoteStorage
+    )
+    const remoteDeletionState = preparePortableSyncState(
+      {
+        topics: [],
+        messages: [],
+        messageBlocks: []
+      },
+      remoteStorage
+    )
+
+    const localState = preparePortableSyncState(
+      {
+        topics: [locallyRetitledSharedTopic, localOnlyTopic],
+        messages: [sharedMessage],
+        messageBlocks: [sharedBlock]
+      },
+      localStorage,
+      toPortableSyncMetadata(remoteDeletionState).frontier
+    )
+
+    const result = resolvePortableSyncSnapshot({
+      currentTopics: [locallyRetitledSharedTopic, localOnlyTopic],
+      incomingTopics: [],
+      currentMessages: [sharedMessage],
+      incomingMessages: [],
+      currentMessageBlocks: [sharedBlock],
+      incomingMessageBlocks: [],
+      localState,
+      incomingSync: toPortableSyncMetadata(remoteDeletionState)
+    })
+
+    expect(result.topics).toEqual([expect.objectContaining({ id: 'local-only-topic' })])
+    expect(result.deletedTopicIds).toContain('shared-topic')
+    expect(result.deletedTopicIds).not.toContain('local-only-topic')
+    expect(result.deletedMessageIds).toContain('shared-message')
+    expect(result.deletedBlockIds).toContain(sharedBlock.id)
+  })
+
   it('suppresses stale assistant responses when a newer slot winner exists on another replica', () => {
     const localStorage = createMemoryStorage()
     localStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'desktop-a')
