@@ -21,6 +21,7 @@ import {
   bootstrapPortableSyncState,
   hasPortableSyncHistory,
   type PortableSyncMetadata,
+  type PortableSyncVersion,
   preparePortableSyncState,
   readPortableSyncState,
   resolvePortableSyncSnapshot,
@@ -199,6 +200,50 @@ function mergeById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
     merged.set(item.id, { ...merged.get(item.id), ...item })
   }
   return Array.from(merged.values())
+}
+
+function formatPortableSyncVersion(version?: PortableSyncVersion) {
+  return version ? `${version.replicaId}:${version.lamport}` : 'none'
+}
+
+function previewPortableValue(value: unknown) {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+
+  return value.length > 80 ? `${value.slice(0, 77)}...` : value
+}
+
+function buildPortableEntityMergeSamples<T extends { id: string }>(params: {
+  current: T[]
+  incoming: T[]
+  resolved: T[]
+  localVersions: Record<string, PortableSyncVersion | undefined>
+  incomingVersions: Record<string, PortableSyncVersion | undefined>
+  tombstones: Record<string, PortableSyncVersion | undefined>
+  summarize: (item: T) => Record<string, unknown>
+  limit?: number
+}) {
+  const { current, incoming, resolved, localVersions, incomingVersions, tombstones, summarize, limit = 8 } = params
+  const currentMap = new Map(current.map((item) => [item.id, item]))
+  const incomingMap = new Map(incoming.map((item) => [item.id, item]))
+  const resolvedMap = new Map(resolved.map((item) => [item.id, item]))
+  const candidateIds = Array.from(
+    new Set<string>([
+      ...current.filter((item) => incomingMap.has(item.id)).map((item) => item.id),
+      ...Object.keys(tombstones).filter((id) => currentMap.has(id) || incomingMap.has(id))
+    ])
+  ).slice(0, limit)
+
+  return candidateIds.map((id) => ({
+    id,
+    localVersion: formatPortableSyncVersion(localVersions[id]),
+    incomingVersion: formatPortableSyncVersion(incomingVersions[id]),
+    tombstoneVersion: formatPortableSyncVersion(tombstones[id]),
+    local: currentMap.has(id) ? summarize(currentMap.get(id)!) : null,
+    incoming: incomingMap.has(id) ? summarize(incomingMap.get(id)!) : null,
+    winner: resolvedMap.has(id) ? summarize(resolvedMap.get(id)!) : null
+  }))
 }
 
 function toDesktopTopics(topics: Topic[] | SyncTopic[] | undefined): Topic[] {
@@ -575,7 +620,8 @@ export async function importMobileSyncPayload(payload: string) {
     rawIncomingBlockCount: rawPortableMessageBlocks.length,
     normalizedIncomingTopicCount: normalizedTopics.length,
     normalizedIncomingMessageCount: incomingMessages.length,
-    normalizedIncomingBlockCount: portableMessageBlocks.length
+    normalizedIncomingBlockCount: portableMessageBlocks.length,
+    logToMain: true
   })
 
   if (
@@ -659,7 +705,8 @@ export async function importMobileSyncPayload(payload: string) {
         replicaId: parsed.sync?.replicaId,
         topicCount: currentTopics.length,
         messageCount: currentConversation.messages.length,
-        blockCount: currentMessageBlocks.length
+        blockCount: currentMessageBlocks.length,
+        logToMain: true
       })
     }
 
@@ -673,6 +720,53 @@ export async function importMobileSyncPayload(payload: string) {
       localState: localSyncState,
       incomingSync: parsed.sync!,
       preferIncomingOnEqualVersion: isBootstrapImport
+    })
+    logger.info('Versioned mobile sync merge samples', {
+      sourceDeviceId: parsed.sourceDeviceId,
+      replicaId: parsed.sync?.replicaId,
+      isBootstrapImport,
+      topicSamples: buildPortableEntityMergeSamples({
+        current: currentTopics,
+        incoming: normalizedTopics,
+        resolved: resolvedConversation.topics,
+        localVersions: localSyncState.entityVersions.topics,
+        incomingVersions: parsed.sync!.entityVersions.topics,
+        tombstones: parsed.sync!.tombstones.topics,
+        summarize: (topic) => ({
+          name: topic.name,
+          assistantId: topic.assistantId,
+          updatedAt: topic.updatedAt
+        })
+      }),
+      messageSamples: buildPortableEntityMergeSamples({
+        current: currentConversation.messages,
+        incoming: incomingMessages,
+        resolved: resolvedConversation.messages,
+        localVersions: localSyncState.entityVersions.messages,
+        incomingVersions: parsed.sync!.entityVersions.messages,
+        tombstones: parsed.sync!.tombstones.messages,
+        summarize: (message) => ({
+          topicId: message.topicId,
+          role: message.role,
+          updatedAt: message.updatedAt,
+          content: previewPortableValue((message as Message & { content?: string }).content)
+        })
+      }),
+      blockSamples: buildPortableEntityMergeSamples({
+        current: currentMessageBlocks,
+        incoming: portableMessageBlocks,
+        resolved: resolvedConversation.messageBlocks,
+        localVersions: localSyncState.entityVersions.blocks,
+        incomingVersions: parsed.sync!.entityVersions.blocks,
+        tombstones: parsed.sync!.tombstones.blocks,
+        summarize: (block) => ({
+          messageId: block.messageId,
+          type: block.type,
+          updatedAt: block.updatedAt,
+          content: previewPortableValue((block as MessageBlock & { content?: string }).content)
+        })
+      }),
+      logToMain: true
     })
     const { assistants: syncedAssistants, defaultAssistant: syncedDefaultAssistant } = buildDesktopSyncAssistantState({
       currentDefaultAssistant: currentAssistants.defaultAssistant,

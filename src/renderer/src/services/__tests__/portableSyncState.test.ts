@@ -596,6 +596,123 @@ describe('portableSyncState', () => {
     ])
   })
 
+  it('round-trips app edits for existing topics back into desktop state', () => {
+    const desktopStorage = createMemoryStorage()
+    desktopStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'desktop-a')
+    const appStorage = createMemoryStorage()
+    appStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'mobile-b')
+
+    const sharedTopic = createTopic({ id: 'shared-topic', assistantId: 'default', name: 'desktop original topic' })
+    const deletedTopic = createTopic({ id: 'deleted-topic', assistantId: 'default', name: 'delete me' })
+    const sharedMessage = createMessage({
+      id: 'shared-message',
+      assistantId: 'default',
+      topicId: sharedTopic.id,
+      role: 'user',
+      content: 'desktop original content'
+    })
+    const deletedMessage = createMessage({
+      id: 'deleted-message',
+      assistantId: 'default',
+      topicId: deletedTopic.id,
+      role: 'user',
+      content: 'to be deleted'
+    })
+    const sharedBlock = {
+      ...createBlock(sharedMessage.id, 'shared-block'),
+      content: 'desktop original block'
+    } satisfies MessageBlock
+    const deletedBlock = {
+      ...createBlock(deletedMessage.id, 'deleted-block'),
+      content: 'delete block'
+    } satisfies MessageBlock
+    const initialDesktopSnapshot = {
+      topics: [sharedTopic, deletedTopic],
+      messages: [sharedMessage, deletedMessage],
+      messageBlocks: [sharedBlock, deletedBlock]
+    }
+
+    const desktopSeedState = preparePortableSyncState(initialDesktopSnapshot, desktopStorage)
+    bootstrapPortableSyncState(initialDesktopSnapshot, toPortableSyncMetadata(desktopSeedState), appStorage)
+
+    const appSharedTopic = createTopic({
+      ...sharedTopic,
+      name: 'mobile renamed topic',
+      updatedAt: '2026-03-29T00:05:00.000Z'
+    })
+    const appSharedMessage = createMessage({
+      ...sharedMessage,
+      content: 'mobile updated content',
+      updatedAt: '2026-03-29T00:05:00.000Z'
+    })
+    const appSharedBlock = {
+      ...sharedBlock,
+      content: 'mobile updated block',
+      updatedAt: '2026-03-29T00:05:00.000Z'
+    } satisfies MessageBlock
+    const appNewTopic = createTopic({
+      id: 'mobile-new-topic',
+      assistantId: 'default',
+      name: 'new on mobile',
+      updatedAt: '2026-03-29T00:06:00.000Z'
+    })
+    const appNewMessage = createMessage({
+      id: 'mobile-new-message',
+      assistantId: 'default',
+      topicId: appNewTopic.id,
+      role: 'user',
+      content: 'brand new'
+    })
+    const appNewBlock = {
+      ...createBlock(appNewMessage.id, 'mobile-new-block'),
+      content: 'brand new block'
+    } satisfies MessageBlock
+    const appSnapshot = {
+      topics: [appSharedTopic, appNewTopic],
+      messages: [appSharedMessage, appNewMessage],
+      messageBlocks: [appSharedBlock, appNewBlock]
+    }
+    const appState = preparePortableSyncState(appSnapshot, appStorage, toPortableSyncMetadata(desktopSeedState).frontier)
+
+    const desktopLocalState = preparePortableSyncState(
+      initialDesktopSnapshot,
+      desktopStorage,
+      toPortableSyncMetadata(appState).frontier
+    )
+    const result = resolvePortableSyncSnapshot({
+      currentTopics: initialDesktopSnapshot.topics,
+      incomingTopics: appSnapshot.topics,
+      currentMessages: initialDesktopSnapshot.messages,
+      incomingMessages: appSnapshot.messages,
+      currentMessageBlocks: initialDesktopSnapshot.messageBlocks,
+      incomingMessageBlocks: appSnapshot.messageBlocks,
+      localState: desktopLocalState,
+      incomingSync: toPortableSyncMetadata(appState)
+    })
+
+    expect(result.topics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'shared-topic', name: 'mobile renamed topic' }),
+        expect.objectContaining({ id: 'mobile-new-topic', name: 'new on mobile' })
+      ])
+    )
+    expect(result.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'shared-message', content: 'mobile updated content' }),
+        expect.objectContaining({ id: 'mobile-new-message', content: 'brand new' })
+      ])
+    )
+    expect(result.messageBlocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'shared-block', content: 'mobile updated block' }),
+        expect.objectContaining({ id: 'mobile-new-block', content: 'brand new block' })
+      ])
+    )
+    expect(result.deletedTopicIds).toContain('deleted-topic')
+    expect(result.deletedMessageIds).toContain('deleted-message')
+    expect(result.deletedBlockIds).toContain('deleted-block')
+  })
+
   it('suppresses stale assistant responses when a newer slot winner exists on another replica', () => {
     const localStorage = createMemoryStorage()
     localStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'desktop-a')
