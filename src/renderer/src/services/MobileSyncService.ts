@@ -254,6 +254,103 @@ function stringifyPortableSyncDebug(value: unknown) {
   }
 }
 
+function summarizePortableSyncMetadata(sync?: PortableSyncMetadata) {
+  if (!sync) {
+    return null
+  }
+
+  return {
+    replicaId: sync.replicaId,
+    lamport: sync.lamport,
+    frontier: Object.entries(sync.frontier || {})
+      .slice(0, 8)
+      .map(([replicaId, lamport]) => ({ replicaId, lamport })),
+    topicVersionCount: Object.keys(sync.entityVersions.topics || {}).length,
+    messageVersionCount: Object.keys(sync.entityVersions.messages || {}).length,
+    blockVersionCount: Object.keys(sync.entityVersions.blocks || {}).length,
+    topicTombstoneCount: Object.keys(sync.tombstones.topics || {}).length,
+    messageTombstoneCount: Object.keys(sync.tombstones.messages || {}).length,
+    blockTombstoneCount: Object.keys(sync.tombstones.blocks || {}).length,
+    messageSlotCount: Object.keys(sync.messageSlots || {}).length,
+    topicTombstoneIds: Object.keys(sync.tombstones.topics || {}).slice(0, 8),
+    messageTombstoneIds: Object.keys(sync.tombstones.messages || {}).slice(0, 8),
+    blockTombstoneIds: Object.keys(sync.tombstones.blocks || {}).slice(0, 8)
+  }
+}
+
+function summarizeAssistantTopics(assistantsState: ReturnType<typeof store.getState>['assistants']) {
+  return {
+    defaultAssistantId: assistantsState.defaultAssistant.id,
+    defaultTopicCount: assistantsState.defaultAssistant.topics.length,
+    defaultTopicPreview: assistantsState.defaultAssistant.topics.slice(0, 5).map((topic) => ({
+      id: topic.id,
+      name: topic.name,
+      assistantId: topic.assistantId,
+      updatedAt: topic.updatedAt
+    })),
+    assistantCount: assistantsState.assistants.length,
+    assistantTopicCount: assistantsState.assistants.reduce((sum, assistant) => sum + assistant.topics.length, 0),
+    assistantPreview: assistantsState.assistants.slice(0, 8).map((assistant) => ({
+      id: assistant.id,
+      topicCount: assistant.topics.length,
+      topicPreview: assistant.topics.slice(0, 3).map((topic) => ({
+        id: topic.id,
+        name: topic.name,
+        assistantId: topic.assistantId,
+        updatedAt: topic.updatedAt
+      }))
+    }))
+  }
+}
+
+function summarizeDesktopConversationSnapshot(
+  topics: Topic[],
+  messages: Message[],
+  messageBlocks: MessageBlock[]
+) {
+  return {
+    topicCount: topics.length,
+    messageCount: messages.length,
+    blockCount: messageBlocks.length,
+    topicPreview: topics.slice(0, 8).map((topic) => ({
+      id: topic.id,
+      name: topic.name,
+      assistantId: topic.assistantId,
+      updatedAt: topic.updatedAt
+    })),
+    messagePreview: messages.slice(0, 8).map((message) => ({
+      id: message.id,
+      topicId: message.topicId,
+      role: message.role,
+      updatedAt: message.updatedAt,
+      content: previewPortableValue((message as Message & { content?: string }).content)
+    })),
+    blockPreview: messageBlocks.slice(0, 8).map((block) => ({
+      id: block.id,
+      messageId: block.messageId,
+      type: block.type,
+      updatedAt: block.updatedAt,
+      content: previewPortableValue((block as MessageBlock & { content?: string }).content)
+    }))
+  }
+}
+
+function summarizePersistedReduxSlices(params: {
+  assistants: ReturnType<typeof store.getState>['assistants']
+  llm: ReturnType<typeof store.getState>['llm']
+  websearch: ReturnType<typeof store.getState>['websearch']
+  settings: ReturnType<typeof store.getState>['settings']
+}) {
+  return {
+    assistants: summarizeAssistantTopics(params.assistants),
+    llmProviderCount: params.llm.providers?.length || 0,
+    websearchProviderCount: params.websearch.providers?.length || 0,
+    searchWithTime: params.websearch.searchWithTime,
+    maxResults: params.websearch.maxResults,
+    userName: params.settings.userName
+  }
+}
+
 function toDesktopTopics(topics: Topic[] | SyncTopic[] | undefined): Topic[] {
   return (topics || []).map((topic) => toDesktopTopic(topic as SyncTopic))
 }
@@ -555,84 +652,88 @@ export async function importMobileSyncPayload(payload: string) {
   }
 
   await persistor.flush()
+  persistor.pause()
+  logger.info('Paused redux persistor for mobile sync import to prevent stale state from overwriting imported data.')
 
-  const persistedState = parsePersistedReduxState()
-  const currentAssistants = readPersistedSlice(persistedState, 'assistants', store.getState().assistants)
-  const currentLlm = readPersistedSlice(persistedState, 'llm', store.getState().llm)
-  const currentWebsearch = readPersistedSlice(persistedState, 'websearch', store.getState().websearch)
-  const currentSettings = readPersistedSlice(persistedState, 'settings', store.getState().settings)
-  const rawIncomingMessages = parsed.data.messages.map(toDesktopMessage)
-  const incomingMessages = normalizePortableConversationMessages(rawIncomingMessages)
-  const incomingDefaultAssistant = {
-    ...parsed.data.assistants.defaultAssistant,
-    topics: toDesktopTopics(parsed.data.assistants.defaultAssistant.topics)
-  }
-  const incomingAssistants = parsed.data.assistants.assistants.map((assistant) => ({
-    ...assistant,
-    topics: toDesktopTopics(assistant.topics)
-  }))
-  const visibleAssistantIds = new Set<string>([
-    currentAssistants.defaultAssistant.id,
-    parsed.data.assistants.defaultAssistant.id,
-    ...currentAssistants.assistants.map((assistant) => assistant.id),
-    ...parsed.data.assistants.assistants.map((assistant) => assistant.id)
-  ])
-  const embeddedTopics = [
-    ...toDesktopTopics(parsed.data.assistants.defaultAssistant.topics),
-    ...parsed.data.assistants.assistants.flatMap((assistant) => toDesktopTopics(assistant.topics))
-  ]
-  const { synthesizedTopicCount, topics: normalizedTopics } = normalizeDesktopSyncTopics(
-    toDesktopTopics(parsed.data.topics),
-    embeddedTopics,
-    incomingMessages,
-    visibleAssistantIds
-  )
-  const rawPortableMessageBlocks = parsed.data.messageBlocks.map(toDesktopMessageBlock)
-  const { droppedBlockCount, messageBlocks: normalizedMessageBlocks } = filterDesktopSyncMessageBlocks(
-    rawPortableMessageBlocks,
-    incomingMessages
-  )
-  const portableMessageBlocks = applyPortableSyncImageAssets(
-    normalizedMessageBlocks,
-    parsed.data.portableImageAssets || []
-  )
+  try {
+    const persistedState = parsePersistedReduxState()
+    const currentAssistants = readPersistedSlice(persistedState, 'assistants', store.getState().assistants)
+    const currentLlm = readPersistedSlice(persistedState, 'llm', store.getState().llm)
+    const currentWebsearch = readPersistedSlice(persistedState, 'websearch', store.getState().websearch)
+    const currentSettings = readPersistedSlice(persistedState, 'settings', store.getState().settings)
+    const rawIncomingMessages = parsed.data.messages.map(toDesktopMessage)
+    const incomingMessages = normalizePortableConversationMessages(rawIncomingMessages)
+    const incomingDefaultAssistant = {
+      ...parsed.data.assistants.defaultAssistant,
+      topics: toDesktopTopics(parsed.data.assistants.defaultAssistant.topics)
+    }
+    const incomingAssistants = parsed.data.assistants.assistants.map((assistant) => ({
+      ...assistant,
+      topics: toDesktopTopics(assistant.topics)
+    }))
+    const visibleAssistantIds = new Set<string>([
+      currentAssistants.defaultAssistant.id,
+      parsed.data.assistants.defaultAssistant.id,
+      ...currentAssistants.assistants.map((assistant) => assistant.id),
+      ...parsed.data.assistants.assistants.map((assistant) => assistant.id)
+    ])
+    const embeddedTopics = [
+      ...toDesktopTopics(parsed.data.assistants.defaultAssistant.topics),
+      ...parsed.data.assistants.assistants.flatMap((assistant) => toDesktopTopics(assistant.topics))
+    ]
+    const { synthesizedTopicCount, topics: normalizedTopics } = normalizeDesktopSyncTopics(
+      toDesktopTopics(parsed.data.topics),
+      embeddedTopics,
+      incomingMessages,
+      visibleAssistantIds
+    )
+    const rawPortableMessageBlocks = parsed.data.messageBlocks.map(toDesktopMessageBlock)
+    const { droppedBlockCount, messageBlocks: normalizedMessageBlocks } = filterDesktopSyncMessageBlocks(
+      rawPortableMessageBlocks,
+      incomingMessages
+    )
+    const portableMessageBlocks = applyPortableSyncImageAssets(
+      normalizedMessageBlocks,
+      parsed.data.portableImageAssets || []
+    )
 
-  writePersistedSlice(persistedState, 'llm', {
-    ...currentLlm,
-    providers: mergeById(currentLlm.providers || [], parsed.data.llm.providers || [])
-  })
+    writePersistedSlice(persistedState, 'llm', {
+      ...currentLlm,
+      providers: mergeById(currentLlm.providers || [], parsed.data.llm.providers || [])
+    })
 
-  writePersistedSlice(persistedState, 'websearch', {
-    ...currentWebsearch,
-    providers: mergeById(currentWebsearch.providers || [], parsed.data.websearch.providers || []),
-    searchWithTime: parsed.data.websearch.searchWithTime ?? currentWebsearch.searchWithTime,
-    maxResults: parsed.data.websearch.maxResults ?? currentWebsearch.maxResults
-  })
+    writePersistedSlice(persistedState, 'websearch', {
+      ...currentWebsearch,
+      providers: mergeById(currentWebsearch.providers || [], parsed.data.websearch.providers || []),
+      searchWithTime: parsed.data.websearch.searchWithTime ?? currentWebsearch.searchWithTime,
+      maxResults: parsed.data.websearch.maxResults ?? currentWebsearch.maxResults
+    })
 
-  writePersistedSlice(persistedState, 'settings', {
-    ...currentSettings,
-    userName: parsed.data.settings.userName ?? currentSettings.userName
-  })
+    writePersistedSlice(persistedState, 'settings', {
+      ...currentSettings,
+      userName: parsed.data.settings.userName ?? currentSettings.userName
+    })
 
-  const isVersionedSync = parsed.version >= 3 && Boolean(parsed.sync?.replicaId)
+    const isVersionedSync = parsed.version >= 3 && Boolean(parsed.sync?.replicaId)
+    logger.info(
+      `Desktop mobile sync current persisted summary ${stringifyPortableSyncDebug(
+        summarizePersistedReduxSlices({
+          assistants: currentAssistants,
+          llm: currentLlm,
+          websearch: currentWebsearch,
+          settings: currentSettings
+        })
+      )}`,
+      { logToMain: true }
+    )
+    logger.info(
+      `Desktop mobile sync incoming sync metadata ${stringifyPortableSyncDebug(
+        summarizePortableSyncMetadata(parsed.sync)
+      )}`,
+      { logToMain: true }
+    )
 
-  logger.info('Importing mobile sync payload', {
-    version: parsed.version,
-    source: parsed.source,
-    sourcePlatform: parsed.sourcePlatform,
-    sourceDeviceId: parsed.sourceDeviceId,
-    sourceAware: isVersionedSync,
-    replicaId: parsed.sync?.replicaId,
-    rawIncomingTopicCount: parsed.data.topics.length,
-    rawIncomingMessageCount: rawIncomingMessages.length,
-    rawIncomingBlockCount: rawPortableMessageBlocks.length,
-    normalizedIncomingTopicCount: normalizedTopics.length,
-    normalizedIncomingMessageCount: incomingMessages.length,
-    normalizedIncomingBlockCount: portableMessageBlocks.length,
-    logToMain: true
-  })
-  logger.info(
-    `Importing mobile sync payload summary ${stringifyPortableSyncDebug({
+    logger.info('Importing mobile sync payload', {
       version: parsed.version,
       source: parsed.source,
       sourcePlatform: parsed.sourcePlatform,
@@ -645,179 +746,170 @@ export async function importMobileSyncPayload(payload: string) {
       normalizedIncomingTopicCount: normalizedTopics.length,
       normalizedIncomingMessageCount: incomingMessages.length,
       normalizedIncomingBlockCount: portableMessageBlocks.length,
-      topicPreview: normalizedTopics.slice(0, 8).map((topic) => ({
-        id: topic.id,
-        name: topic.name,
-        assistantId: topic.assistantId,
-        updatedAt: topic.updatedAt
-      })),
-      messagePreview: incomingMessages.slice(0, 8).map((message) => ({
-        id: message.id,
-        topicId: message.topicId,
-        role: message.role,
-        updatedAt: message.updatedAt,
-        content: previewPortableValue((message as Message & { content?: string }).content)
-      })),
-      blockPreview: portableMessageBlocks.slice(0, 8).map((block) => ({
-        id: block.id,
-        messageId: block.messageId,
-        type: block.type,
-        updatedAt: block.updatedAt,
-        content: previewPortableValue((block as MessageBlock & { content?: string }).content)
-      })),
-      tombstoneTopicIds: Object.keys(parsed.sync?.tombstones.topics || {}).slice(0, 8),
-      tombstoneMessageIds: Object.keys(parsed.sync?.tombstones.messages || {}).slice(0, 8),
-      tombstoneBlockIds: Object.keys(parsed.sync?.tombstones.blocks || {}).slice(0, 8)
-    })}`,
-    { logToMain: true }
-  )
-
-  if (
-    rawIncomingMessages.length !== incomingMessages.length ||
-    rawPortableMessageBlocks.length !== portableMessageBlocks.length
-  ) {
-    logger.info('Normalized legacy-style mobile sync snapshot before import', {
-      rawIncomingMessageCount: rawIncomingMessages.length,
-      normalizedIncomingMessageCount: incomingMessages.length,
-      rawIncomingBlockCount: rawPortableMessageBlocks.length,
-      normalizedIncomingBlockCount: portableMessageBlocks.length
+      logToMain: true
     })
-  }
-
-  if (!isVersionedSync) {
-    const { assistants: mergedAssistants, defaultAssistant: mergedDefaultAssistant } = buildDesktopSyncAssistantState({
-      currentDefaultAssistant: currentAssistants.defaultAssistant,
-      currentAssistants: currentAssistants.assistants,
-      incomingDefaultAssistant,
-      incomingAssistants,
-      normalizedTopics
-    })
-
-    writePersistedSlice(persistedState, 'assistants', {
-      ...currentAssistants,
-      defaultAssistant: mergedDefaultAssistant,
-      assistants: mergeById(currentAssistants.assistants, mergedAssistants)
-    })
-
-    localStorage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, JSON.stringify(persistedState))
-
-    await db.transaction('rw', db.table('topics'), db.table('message_blocks'), db.table('settings'), async () => {
-      for (const topic of normalizedTopics) {
-        const existing = (await db.table('topics').get(topic.id)) as { id: string; messages?: Message[] } | undefined
-        const topicMessages = incomingMessages.filter((message) => message.topicId === topic.id)
-        const mergedMessages = sortMessages(
-          mergeById<Message>(
-            existing?.messages || [],
-            topicMessages.map((message) => ({ ...message }))
-          )
-        )
-
-        await db.table('topics').put({
-          id: topic.id,
-          messages: mergedMessages
-        })
-      }
-
-      if (portableMessageBlocks.length > 0) {
-        await db.table('message_blocks').bulkPut(portableMessageBlocks)
-      }
-
-      if (parsed.data.settings.avatar) {
-        await db.table('settings').put({
-          id: 'image://avatar',
-          value: parsed.data.settings.avatar
-        })
-      }
-    })
-  } else {
-    const currentTopicRecords = (await db.table('topics').toArray()) as Array<{ id: string; messages?: Message[] }>
-    const currentMessageBlocks = (await db.table('message_blocks').toArray()) as MessageBlock[]
-    const currentAssistantTopics = collectTopicMetadataFromAssistantState(currentAssistants)
-    const currentTopicMetadata = new Map(currentAssistantTopics.map((topic) => [topic.id, topic]))
-    const currentConversation = buildDesktopConversationSnapshot(currentTopicRecords, currentTopicMetadata)
-    const currentTopics = currentConversation.topics
-    const currentSnapshot = {
-      topics: currentTopics,
-      messages: currentConversation.messages,
-      messageBlocks: currentMessageBlocks
-    }
-    const existingSyncState = readPortableSyncState(localStorage)
-    const isBootstrapImport = !hasPortableSyncHistory(existingSyncState)
-    const localSyncState = isBootstrapImport
-      ? bootstrapPortableSyncState(currentSnapshot, parsed.sync!, localStorage)
-      : preparePortableSyncState(currentSnapshot, localStorage, parsed.sync!.frontier)
-
-    if (isBootstrapImport) {
-      logger.info('Bootstrapped portable sync lineage from incoming mobile sync payload', {
+    logger.info(
+      `Importing mobile sync payload summary ${stringifyPortableSyncDebug({
+        version: parsed.version,
+        source: parsed.source,
+        sourcePlatform: parsed.sourcePlatform,
         sourceDeviceId: parsed.sourceDeviceId,
+        sourceAware: isVersionedSync,
         replicaId: parsed.sync?.replicaId,
-        topicCount: currentTopics.length,
-        messageCount: currentConversation.messages.length,
-        blockCount: currentMessageBlocks.length,
-        logToMain: true
-      })
-    }
-
-    const resolvedConversation = resolvePortableSyncSnapshot({
-      currentTopics,
-      incomingTopics: normalizedTopics,
-      currentMessages: currentConversation.messages,
-      incomingMessages,
-      currentMessageBlocks,
-      incomingMessageBlocks: portableMessageBlocks,
-      localState: localSyncState,
-      incomingSync: parsed.sync!,
-      preferIncomingOnEqualVersion: isBootstrapImport
-    })
-    logger.info('Versioned mobile sync merge samples', {
-      sourceDeviceId: parsed.sourceDeviceId,
-      replicaId: parsed.sync?.replicaId,
-      isBootstrapImport,
-      topicSamples: buildPortableEntityMergeSamples({
-        current: currentTopics,
-        incoming: normalizedTopics,
-        resolved: resolvedConversation.topics,
-        localVersions: localSyncState.entityVersions.topics,
-        incomingVersions: parsed.sync!.entityVersions.topics,
-        tombstones: parsed.sync!.tombstones.topics,
-        summarize: (topic) => ({
+        rawIncomingTopicCount: parsed.data.topics.length,
+        rawIncomingMessageCount: rawIncomingMessages.length,
+        rawIncomingBlockCount: rawPortableMessageBlocks.length,
+        normalizedIncomingTopicCount: normalizedTopics.length,
+        normalizedIncomingMessageCount: incomingMessages.length,
+        normalizedIncomingBlockCount: portableMessageBlocks.length,
+        topicPreview: normalizedTopics.slice(0, 8).map((topic) => ({
+          id: topic.id,
           name: topic.name,
           assistantId: topic.assistantId,
           updatedAt: topic.updatedAt
-        })
-      }),
-      messageSamples: buildPortableEntityMergeSamples({
-        current: currentConversation.messages,
-        incoming: incomingMessages,
-        resolved: resolvedConversation.messages,
-        localVersions: localSyncState.entityVersions.messages,
-        incomingVersions: parsed.sync!.entityVersions.messages,
-        tombstones: parsed.sync!.tombstones.messages,
-        summarize: (message) => ({
+        })),
+        messagePreview: incomingMessages.slice(0, 8).map((message) => ({
+          id: message.id,
           topicId: message.topicId,
           role: message.role,
           updatedAt: message.updatedAt,
           content: previewPortableValue((message as Message & { content?: string }).content)
-        })
-      }),
-      blockSamples: buildPortableEntityMergeSamples({
-        current: currentMessageBlocks,
-        incoming: portableMessageBlocks,
-        resolved: resolvedConversation.messageBlocks,
-        localVersions: localSyncState.entityVersions.blocks,
-        incomingVersions: parsed.sync!.entityVersions.blocks,
-        tombstones: parsed.sync!.tombstones.blocks,
-        summarize: (block) => ({
+        })),
+        blockPreview: portableMessageBlocks.slice(0, 8).map((block) => ({
+          id: block.id,
           messageId: block.messageId,
           type: block.type,
           updatedAt: block.updatedAt,
           content: previewPortableValue((block as MessageBlock & { content?: string }).content)
+        })),
+        tombstoneTopicIds: Object.keys(parsed.sync?.tombstones.topics || {}).slice(0, 8),
+        tombstoneMessageIds: Object.keys(parsed.sync?.tombstones.messages || {}).slice(0, 8),
+        tombstoneBlockIds: Object.keys(parsed.sync?.tombstones.blocks || {}).slice(0, 8)
+      })}`,
+      { logToMain: true }
+    )
+
+    if (
+      rawIncomingMessages.length !== incomingMessages.length ||
+      rawPortableMessageBlocks.length !== portableMessageBlocks.length
+    ) {
+      logger.info('Normalized legacy-style mobile sync snapshot before import', {
+        rawIncomingMessageCount: rawIncomingMessages.length,
+        normalizedIncomingMessageCount: incomingMessages.length,
+        rawIncomingBlockCount: rawPortableMessageBlocks.length,
+        normalizedIncomingBlockCount: portableMessageBlocks.length
+      })
+    }
+
+    if (!isVersionedSync) {
+      const { assistants: mergedAssistants, defaultAssistant: mergedDefaultAssistant } = buildDesktopSyncAssistantState({
+        currentDefaultAssistant: currentAssistants.defaultAssistant,
+        currentAssistants: currentAssistants.assistants,
+        incomingDefaultAssistant,
+        incomingAssistants,
+        normalizedTopics
+      })
+
+      writePersistedSlice(persistedState, 'assistants', {
+        ...currentAssistants,
+        defaultAssistant: mergedDefaultAssistant,
+        assistants: mergeById(currentAssistants.assistants, mergedAssistants)
+      })
+
+      localStorage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, JSON.stringify(persistedState))
+
+      await db.transaction('rw', db.table('topics'), db.table('message_blocks'), db.table('settings'), async () => {
+        for (const topic of normalizedTopics) {
+          const existing = (await db.table('topics').get(topic.id)) as { id: string; messages?: Message[] } | undefined
+          const topicMessages = incomingMessages.filter((message) => message.topicId === topic.id)
+          const mergedMessages = sortMessages(
+            mergeById<Message>(
+              existing?.messages || [],
+              topicMessages.map((message) => ({ ...message }))
+            )
+          )
+
+          await db.table('topics').put({
+            id: topic.id,
+            messages: mergedMessages
+          })
+        }
+
+        if (portableMessageBlocks.length > 0) {
+          await db.table('message_blocks').bulkPut(portableMessageBlocks)
+        }
+
+        if (parsed.data.settings.avatar) {
+          await db.table('settings').put({
+            id: 'image://avatar',
+            value: parsed.data.settings.avatar
+          })
+        }
+      })
+
+      const writtenAssistants = readPersistedSlice(persistedState, 'assistants', currentAssistants)
+      logger.info(
+        `Desktop mobile sync legacy write summary ${stringifyPortableSyncDebug({
+          persisted: summarizePersistedReduxSlices({
+            assistants: writtenAssistants,
+            llm: readPersistedSlice(persistedState, 'llm', currentLlm),
+            websearch: readPersistedSlice(persistedState, 'websearch', currentWebsearch),
+            settings: readPersistedSlice(persistedState, 'settings', currentSettings)
+          }),
+          snapshot: summarizeDesktopConversationSnapshot(normalizedTopics, incomingMessages, portableMessageBlocks)
+        })}`,
+        { logToMain: true }
+      )
+    } else {
+      const currentTopicRecords = (await db.table('topics').toArray()) as Array<{ id: string; messages?: Message[] }>
+      const currentMessageBlocks = (await db.table('message_blocks').toArray()) as MessageBlock[]
+      const currentAssistantTopics = collectTopicMetadataFromAssistantState(currentAssistants)
+      const currentTopicMetadata = new Map(currentAssistantTopics.map((topic) => [topic.id, topic]))
+      const currentConversation = buildDesktopConversationSnapshot(currentTopicRecords, currentTopicMetadata)
+      const currentTopics = currentConversation.topics
+      const currentSnapshot = {
+        topics: currentTopics,
+        messages: currentConversation.messages,
+        messageBlocks: currentMessageBlocks
+      }
+      const existingSyncState = readPortableSyncState(localStorage)
+      const isBootstrapImport = !hasPortableSyncHistory(existingSyncState)
+      const localSyncState = isBootstrapImport
+        ? bootstrapPortableSyncState(currentSnapshot, parsed.sync!, localStorage)
+        : preparePortableSyncState(currentSnapshot, localStorage, parsed.sync!.frontier)
+
+      logger.info(
+        `Desktop mobile sync local snapshot before merge ${stringifyPortableSyncDebug({
+          snapshot: summarizeDesktopConversationSnapshot(currentTopics, currentConversation.messages, currentMessageBlocks),
+          sync: summarizePortableSyncMetadata(toPortableSyncMetadata(localSyncState)),
+          isBootstrapImport
+        })}`,
+        { logToMain: true }
+      )
+
+      if (isBootstrapImport) {
+        logger.info('Bootstrapped portable sync lineage from incoming mobile sync payload', {
+          sourceDeviceId: parsed.sourceDeviceId,
+          replicaId: parsed.sync?.replicaId,
+          topicCount: currentTopics.length,
+          messageCount: currentConversation.messages.length,
+          blockCount: currentMessageBlocks.length,
+          logToMain: true
         })
-      }),
-      logToMain: true
-    })
-    logger.info(
-      `Versioned mobile sync merge samples ${stringifyPortableSyncDebug({
+      }
+
+      const resolvedConversation = resolvePortableSyncSnapshot({
+        currentTopics,
+        incomingTopics: normalizedTopics,
+        currentMessages: currentConversation.messages,
+        incomingMessages,
+        currentMessageBlocks,
+        incomingMessageBlocks: portableMessageBlocks,
+        localState: localSyncState,
+        incomingSync: parsed.sync!,
+        preferIncomingOnEqualVersion: isBootstrapImport
+      })
+      logger.info('Versioned mobile sync merge samples', {
         sourceDeviceId: parsed.sourceDeviceId,
         replicaId: parsed.sync?.replicaId,
         isBootstrapImport,
@@ -861,81 +953,181 @@ export async function importMobileSyncPayload(payload: string) {
             updatedAt: block.updatedAt,
             content: previewPortableValue((block as MessageBlock & { content?: string }).content)
           })
-        })
-      })}`,
-      { logToMain: true }
-    )
-    const { assistants: syncedAssistants, defaultAssistant: syncedDefaultAssistant } = buildDesktopSyncAssistantState({
-      currentDefaultAssistant: currentAssistants.defaultAssistant,
-      currentAssistants: currentAssistants.assistants,
-      incomingDefaultAssistant,
-      incomingAssistants,
-      normalizedTopics: resolvedConversation.topics,
-      replaceTopics: true
-    })
+        }),
+        logToMain: true
+      })
+      logger.info(
+        `Versioned mobile sync merge samples ${stringifyPortableSyncDebug({
+          sourceDeviceId: parsed.sourceDeviceId,
+          replicaId: parsed.sync?.replicaId,
+          isBootstrapImport,
+          topicSamples: buildPortableEntityMergeSamples({
+            current: currentTopics,
+            incoming: normalizedTopics,
+            resolved: resolvedConversation.topics,
+            localVersions: localSyncState.entityVersions.topics,
+            incomingVersions: parsed.sync!.entityVersions.topics,
+            tombstones: parsed.sync!.tombstones.topics,
+            summarize: (topic) => ({
+              name: topic.name,
+              assistantId: topic.assistantId,
+              updatedAt: topic.updatedAt
+            })
+          }),
+          messageSamples: buildPortableEntityMergeSamples({
+            current: currentConversation.messages,
+            incoming: incomingMessages,
+            resolved: resolvedConversation.messages,
+            localVersions: localSyncState.entityVersions.messages,
+            incomingVersions: parsed.sync!.entityVersions.messages,
+            tombstones: parsed.sync!.tombstones.messages,
+            summarize: (message) => ({
+              topicId: message.topicId,
+              role: message.role,
+              updatedAt: message.updatedAt,
+              content: previewPortableValue((message as Message & { content?: string }).content)
+            })
+          }),
+          blockSamples: buildPortableEntityMergeSamples({
+            current: currentMessageBlocks,
+            incoming: portableMessageBlocks,
+            resolved: resolvedConversation.messageBlocks,
+            localVersions: localSyncState.entityVersions.blocks,
+            incomingVersions: parsed.sync!.entityVersions.blocks,
+            tombstones: parsed.sync!.tombstones.blocks,
+            summarize: (block) => ({
+              messageId: block.messageId,
+              type: block.type,
+              updatedAt: block.updatedAt,
+              content: previewPortableValue((block as MessageBlock & { content?: string }).content)
+            })
+          })
+        })}`,
+        { logToMain: true }
+      )
+      logger.info(
+        `Desktop mobile sync resolved snapshot summary ${stringifyPortableSyncDebug({
+          snapshot: summarizeDesktopConversationSnapshot(
+            resolvedConversation.topics,
+            resolvedConversation.messages,
+            resolvedConversation.messageBlocks
+          ),
+          deletedTopicIds: resolvedConversation.deletedTopicIds,
+          deletedMessageIds: resolvedConversation.deletedMessageIds.slice(0, 8),
+          deletedBlockIds: resolvedConversation.deletedBlockIds.slice(0, 8),
+          sync: summarizePortableSyncMetadata(toPortableSyncMetadata(resolvedConversation.syncState))
+        })}`,
+        { logToMain: true }
+      )
+      const { assistants: syncedAssistants, defaultAssistant: syncedDefaultAssistant } = buildDesktopSyncAssistantState({
+        currentDefaultAssistant: currentAssistants.defaultAssistant,
+        currentAssistants: currentAssistants.assistants,
+        incomingDefaultAssistant,
+        incomingAssistants,
+        normalizedTopics: resolvedConversation.topics,
+        replaceTopics: true
+      })
 
-    writePersistedSlice(persistedState, 'assistants', {
-      ...currentAssistants,
-      defaultAssistant: syncedDefaultAssistant,
-      assistants: syncedAssistants
-    })
+      writePersistedSlice(persistedState, 'assistants', {
+        ...currentAssistants,
+        defaultAssistant: syncedDefaultAssistant,
+        assistants: syncedAssistants
+      })
 
-    localStorage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, JSON.stringify(persistedState))
+      localStorage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, JSON.stringify(persistedState))
 
-    await db.transaction('rw', db.table('topics'), db.table('message_blocks'), db.table('settings'), async () => {
+      await db.transaction('rw', db.table('topics'), db.table('message_blocks'), db.table('settings'), async () => {
+        if (resolvedConversation.deletedTopicIds.length > 0) {
+          await db.table('topics').bulkDelete(resolvedConversation.deletedTopicIds)
+        }
+
+        const messagesByTopicId = resolvedConversation.messages.reduce<Map<string, Message[]>>((result, message) => {
+          const existing = result.get(message.topicId) || []
+          result.set(message.topicId, [...existing, message])
+          return result
+        }, new Map())
+
+        for (const topic of resolvedConversation.topics) {
+          await db.table('topics').put({
+            id: topic.id,
+            messages: sortMessages(messagesByTopicId.get(topic.id) || [])
+          })
+        }
+
+        if (resolvedConversation.deletedBlockIds.length > 0) {
+          await db.table('message_blocks').bulkDelete(resolvedConversation.deletedBlockIds)
+        }
+
+        if (resolvedConversation.messageBlocks.length > 0) {
+          await db.table('message_blocks').bulkPut(resolvedConversation.messageBlocks)
+        }
+
+        if (parsed.data.settings.avatar) {
+          await db.table('settings').put({
+            id: 'image://avatar',
+            value: parsed.data.settings.avatar
+          })
+        }
+      })
+      writePortableSyncState(resolvedConversation.syncState)
+
+      const writtenAssistants = readPersistedSlice(persistedState, 'assistants', currentAssistants)
+      const writtenLlm = readPersistedSlice(persistedState, 'llm', currentLlm)
+      const writtenWebsearch = readPersistedSlice(persistedState, 'websearch', currentWebsearch)
+      const writtenSettings = readPersistedSlice(persistedState, 'settings', currentSettings)
+      const writtenTopicRecords = (await db.table('topics').toArray()) as Array<{ id: string; messages?: Message[] }>
+      const writtenBlocks = (await db.table('message_blocks').toArray()) as MessageBlock[]
+      const writtenConversation = buildDesktopConversationSnapshot(
+        writtenTopicRecords,
+        new Map(
+          [
+            ...writtenAssistants.defaultAssistant.topics,
+            ...writtenAssistants.assistants.flatMap((assistant) => assistant.topics)
+          ].map((topic) => [topic.id, topic])
+        )
+      )
+      logger.info(
+        `Desktop mobile sync persisted write summary ${stringifyPortableSyncDebug({
+          persisted: summarizePersistedReduxSlices({
+            assistants: writtenAssistants,
+            llm: writtenLlm,
+            websearch: writtenWebsearch,
+            settings: writtenSettings
+          }),
+          snapshot: summarizeDesktopConversationSnapshot(
+            writtenConversation.topics,
+            writtenConversation.messages,
+            writtenBlocks
+          ),
+          portableSync: summarizePortableSyncMetadata(toPortableSyncMetadata(readPortableSyncState(localStorage)))
+        })}`,
+        { logToMain: true }
+      )
+
       if (resolvedConversation.deletedTopicIds.length > 0) {
-        await db.table('topics').bulkDelete(resolvedConversation.deletedTopicIds)
+        logger.info(`Deleted ${resolvedConversation.deletedTopicIds.length} topic(s) from versioned mobile sync`)
       }
-
-      const messagesByTopicId = resolvedConversation.messages.reduce<Map<string, Message[]>>((result, message) => {
-        const existing = result.get(message.topicId) || []
-        result.set(message.topicId, [...existing, message])
-        return result
-      }, new Map())
-
-      for (const topic of resolvedConversation.topics) {
-        await db.table('topics').put({
-          id: topic.id,
-          messages: sortMessages(messagesByTopicId.get(topic.id) || [])
-        })
+      if (resolvedConversation.deletedMessageIds.length > 0) {
+        logger.info(`Deleted ${resolvedConversation.deletedMessageIds.length} message(s) from versioned mobile sync`)
       }
-
       if (resolvedConversation.deletedBlockIds.length > 0) {
-        await db.table('message_blocks').bulkDelete(resolvedConversation.deletedBlockIds)
+        logger.info(`Deleted ${resolvedConversation.deletedBlockIds.length} block(s) from versioned mobile sync`)
       }
-
-      if (resolvedConversation.messageBlocks.length > 0) {
-        await db.table('message_blocks').bulkPut(resolvedConversation.messageBlocks)
-      }
-
-      if (parsed.data.settings.avatar) {
-        await db.table('settings').put({
-          id: 'image://avatar',
-          value: parsed.data.settings.avatar
-        })
-      }
-    })
-    writePortableSyncState(resolvedConversation.syncState)
-
-    if (resolvedConversation.deletedTopicIds.length > 0) {
-      logger.info(`Deleted ${resolvedConversation.deletedTopicIds.length} topic(s) from versioned mobile sync`)
     }
-    if (resolvedConversation.deletedMessageIds.length > 0) {
-      logger.info(`Deleted ${resolvedConversation.deletedMessageIds.length} message(s) from versioned mobile sync`)
+
+    if (synthesizedTopicCount > 0) {
+      logger.warn(`Synthesized ${synthesizedTopicCount} missing topic record(s) from mobile sync messages`)
     }
-    if (resolvedConversation.deletedBlockIds.length > 0) {
-      logger.info(`Deleted ${resolvedConversation.deletedBlockIds.length} block(s) from versioned mobile sync`)
+
+    if (droppedBlockCount > 0) {
+      logger.warn(`Dropped ${droppedBlockCount} orphan message block(s) during mobile sync import`)
     }
-  }
 
-  if (synthesizedTopicCount > 0) {
-    logger.warn(`Synthesized ${synthesizedTopicCount} missing topic record(s) from mobile sync messages`)
+    logger.info('Mobile sync payload imported. Relaunching to refresh Redux and Dexie bindings.')
+    setTimeout(() => window.api.relaunchApp(), 0)
+  } catch (error) {
+    persistor.persist()
+    logger.info('Resumed redux persistor after mobile sync import failed.')
+    throw error
   }
-
-  if (droppedBlockCount > 0) {
-    logger.warn(`Dropped ${droppedBlockCount} orphan message block(s) during mobile sync import`)
-  }
-
-  logger.info('Mobile sync payload imported. Relaunching to refresh Redux and Dexie bindings.')
-  setTimeout(() => window.api.relaunchApp(), 300)
 }
