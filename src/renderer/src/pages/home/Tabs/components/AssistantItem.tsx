@@ -173,6 +173,15 @@ const AssistantItem: FC<AssistantItemProps> = ({
             className={isPending && !isActive ? 'animation-pulse' : ''}
           />
           <AssistantName className="text-nowrap">{assistantName}</AssistantName>
+          {assistant.topics && (
+            <div
+              className={cn(
+                'text-[11px] text-(--color-text-lighter) shrink-0 ml-1 transition-all',
+                isActive || isHovered ? 'mr-7' : ''
+              )}>
+              {assistant.topics.length}
+            </div>
+          )}
         </AssistantNameRow>
         {(isActive || isHovered) && (
           <Dropdown
