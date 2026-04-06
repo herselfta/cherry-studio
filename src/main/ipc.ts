@@ -130,6 +130,15 @@ function extractPluginError(error: unknown): PluginError | null {
   return null
 }
 
+function isSafeExternalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return ['http:', 'https:', 'mailto:'].includes(parsed.protocol)
+  } catch {
+    return false
+  }
+}
+
 export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) {
   const appUpdater = new AppUpdater()
   const notificationService = new NotificationService()
@@ -188,7 +197,13 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
 
   ipcMain.handle(IpcChannel.App_Reload, () => mainWindow.reload())
   ipcMain.handle(IpcChannel.App_Quit, () => app.quit())
-  ipcMain.handle(IpcChannel.Open_Website, (_, url: string) => shell.openExternal(url))
+  ipcMain.handle(IpcChannel.Open_Website, (_, url: string) => {
+    if (!isSafeExternalUrl(url)) {
+      logger.warn(`Blocked shell.openExternal for untrusted URL scheme: ${url}`)
+      return
+    }
+    return shell.openExternal(url)
+  })
 
   // Update
   ipcMain.handle(IpcChannel.App_QuitAndInstall, () => appUpdater.quitAndInstall())

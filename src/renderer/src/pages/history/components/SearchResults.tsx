@@ -267,11 +267,14 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
   }, [searchResults, sortOrder])
 
   const highlightText = (text: string) => {
+    const escapeHtml = (value: string) =>
+      value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    const safeText = escapeHtml(text)
     const highlightRegex = buildKeywordUnionRegex(searchTerms, { matchMode, flags: 'gi' })
     if (!highlightRegex) {
-      return <span dangerouslySetInnerHTML={{ __html: text }} />
+      return <span dangerouslySetInnerHTML={{ __html: safeText }} />
     }
-    const highlightedText = text.replace(highlightRegex, (match) => `<mark>${match}</mark>`)
+    const highlightedText = safeText.replace(highlightRegex, (match) => `<mark>${match}</mark>`)
     return <span dangerouslySetInnerHTML={{ __html: highlightedText }} />
   }
 
