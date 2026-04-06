@@ -11,11 +11,15 @@ interface Props {
 }
 
 const MessageContent: React.FC<Props> = ({ message }) => {
+  const validMentions = message.mentions?.filter(
+    (mention) => mention.id !== (message.modelId || message.model?.id)
+  )
+
   return (
     <>
-      {!isEmpty(message.mentions) && (
+      {!isEmpty(validMentions) && (
         <Flex gap="8px" wrap style={{ marginBottom: '10px' }}>
-          {message.mentions?.map((model) => (
+          {validMentions?.map((model) => (
             <MentionTag key={getModelUniqId(model)}>{'@' + model.name}</MentionTag>
           ))}
         </Flex>
