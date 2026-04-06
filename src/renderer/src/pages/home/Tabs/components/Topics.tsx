@@ -188,46 +188,34 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
 
   const onPinTopic = useCallback(
     (topic: Topic) => {
-      let newIndex = 0
+      if (pinTopicsToTop) {
+        let newIndex = 0
 
-      if (topic.pinned) {
-        // 取消固定：将话题移到未固定话题的顶部
-        const pinnedTopics = assistant.topics.filter((t) => t.pinned)
-        const unpinnedTopics = assistant.topics.filter((t) => !t.pinned)
+        if (topic.pinned) {
+          const pinnedTopics = assistant.topics.filter((t) => t.pinned)
+          const unpinnedTopics = assistant.topics.filter((t) => !t.pinned)
+          const reorderedTopics = [...pinnedTopics.filter((t) => t.id !== topic.id), topic, ...unpinnedTopics]
 
-        // 构建新顺序：其他固定话题 + 取消固定的话题(移到顶部) + 其他未固定话题
-        const reorderedTopics = [
-          ...pinnedTopics.filter((t) => t.id !== topic.id), // 其他固定话题
-          topic, // 取消固定的话题移到顶部
-          ...unpinnedTopics // 其他未固定话题
-        ]
+          newIndex = pinnedTopics.length - 1
+          updateTopics(reorderedTopics)
+        } else {
+          const pinnedTopics = assistant.topics.filter((t) => t.pinned)
+          const unpinnedTopics = assistant.topics.filter((t) => !t.pinned)
+          const reorderedTopics = [topic, ...pinnedTopics, ...unpinnedTopics.filter((t) => t.id !== topic.id)]
 
-        newIndex = pinnedTopics.length - 1 // 最后一个固定话题的索引 + 1 = 第一个未固定的索引
-        updateTopics(reorderedTopics)
-      } else {
-        // 固定话题：移到固定区域顶部
-        const pinnedTopics = assistant.topics.filter((t) => t.pinned)
-        const unpinnedTopics = assistant.topics.filter((t) => !t.pinned)
+          newIndex = 0
+          updateTopics(reorderedTopics)
+        }
 
-        const reorderedTopics = [
-          topic, // 新固定的话题移到顶部
-          ...pinnedTopics, // 其他固定话题
-          ...unpinnedTopics.filter((t) => t.id !== topic.id) // 其他未固定话题（排除 topic）
-        ]
-
-        newIndex = 0
-        updateTopics(reorderedTopics)
+        setTimeout(() => {
+          listRef.current?.scrollToIndex(newIndex, { align: 'auto' })
+        }, 50)
       }
 
       const updatedTopic = { ...topic, pinned: !topic.pinned }
       updateTopic(updatedTopic)
-
-      // 延迟滚动到话题位置（等待渲染完成）
-      setTimeout(() => {
-        listRef.current?.scrollToIndex(newIndex, { align: 'auto' })
-      }, 50)
     },
-    [assistant.topics, updateTopic, updateTopics]
+    [assistant.topics, pinTopicsToTop, updateTopic, updateTopics]
   )
 
   const onDeleteTopic = useCallback(

@@ -1,7 +1,7 @@
 import type { Model } from '@renderer/types'
 import { describe, expect, it, vi } from 'vitest'
 
-import { isSupportNoneReasoningEffortModel } from '../openai'
+import { isOpenAILLMModel, isOpenAIModel, isSupportNoneReasoningEffortModel } from '../openai'
 
 // Mock store and settings to avoid initialization issues
 vi.mock('@renderer/store', () => ({
@@ -27,6 +27,18 @@ const createModel = (overrides: Partial<Model> = {}): Model => ({
 })
 
 describe('OpenAI Model Detection', () => {
+  describe('boundary matching', () => {
+    it('detects GPT-prefixed OpenAI models', () => {
+      expect(isOpenAIModel(createModel({ id: 'gpt-4.1' }))).toBe(true)
+      expect(isOpenAILLMModel(createModel({ id: 'GPT-5-turbo' }))).toBe(true)
+    })
+
+    it('does not misclassify GPTQ model names as OpenAI models', () => {
+      expect(isOpenAIModel(createModel({ id: 'Qwen3.5-122B-A10B-GPTQ' }))).toBe(false)
+      expect(isOpenAILLMModel(createModel({ id: 'llama-3-70b-gptq' }))).toBe(false)
+    })
+  })
+
   describe('isSupportNoneReasoningEffortModel', () => {
     describe('should return true for GPT-5.1 and GPT-5.2 reasoning models', () => {
       it('returns true for GPT-5.1 base model', () => {

@@ -90,6 +90,8 @@ type DirectoryListOptions = {
   searchPattern?: string
 }
 
+const ALLOWED_EXTERNAL_PROTOCOLS = ['http:', 'https:', 'mailto:']
+
 export function tracedInvoke(channel: string, spanContext: SpanContext | undefined, ...args: any[]) {
   if (spanContext) {
     const data = { type: 'trace', context: spanContext }
@@ -477,7 +479,17 @@ const api = {
       ipcRenderer.invoke(IpcChannel.Python_Execute, script, context, timeout)
   },
   shell: {
-    openExternal: (url: string, options?: Electron.OpenExternalOptions) => shell.openExternal(url, options)
+    openExternal: (url: string, options?: Electron.OpenExternalOptions) => {
+      try {
+        const parsed = new URL(url)
+        if (!ALLOWED_EXTERNAL_PROTOCOLS.includes(parsed.protocol)) {
+          return Promise.reject(new Error(`Blocked openExternal for untrusted URL scheme: ${parsed.protocol}`))
+        }
+      } catch {
+        return Promise.reject(new Error('Blocked openExternal for invalid URL'))
+      }
+      return shell.openExternal(url, options)
+    }
   },
   copilot: {
     getAuthMessage: (headers?: Record<string, string>) =>
