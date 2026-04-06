@@ -72,9 +72,7 @@ function createTopic(overrides: Partial<Topic> & Pick<Topic, 'id' | 'assistantId
   }
 }
 
-function createMessage(
-  overrides: Partial<TestMessage> & Pick<Message, 'id' | 'assistantId' | 'topicId'>
-): TestMessage {
+function createMessage(overrides: Partial<TestMessage> & Pick<Message, 'id' | 'assistantId' | 'topicId'>): TestMessage {
   return {
     role: 'assistant',
     status: AssistantMessageStatus.SUCCESS,

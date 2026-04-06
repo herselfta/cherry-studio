@@ -412,8 +412,6 @@ export function buildDesktopSyncAssistantState({
     ...incomingAssistants.map((assistant) => assistant.id),
     ...Array.from(topicsByAssistantId.keys())
   ])
-  allAssistantIds.delete(currentDefaultAssistant.id)
-  allAssistantIds.delete(incomingDefaultAssistant.id)
 
   const defaultAssistant = {
     ...currentDefaultAssistant,
@@ -427,6 +425,12 @@ export function buildDesktopSyncAssistantState({
   }
 
   const assistants = Array.from(allAssistantIds).map((assistantId) => {
+    if (assistantId === defaultAssistant.id) {
+      // Keep the default assistant mirrored inside `assistants[]` for legacy Redux/UI selectors
+      // that still read topics exclusively from that list during the v2 migration window.
+      return defaultAssistant
+    }
+
     const currentAssistant = currentAssistants.find((assistant) => assistant.id === assistantId)
     const incomingAssistant = incomingAssistantMap.get(assistantId)
     const fallbackAssistant =
