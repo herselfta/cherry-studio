@@ -1141,7 +1141,9 @@ export async function handleData(data: Record<string, any>) {
 
     restoreBackupLocalStorageSnapshot(data.localStorage)
     window.toast.success(i18n.t('message.restore.success'))
-    setTimeout(() => window.api.relaunchApp(), 1000)
+    ;(window as any).__cherry_studio_is_importing = true
+    await window.api.flushAppData()
+    setTimeout(() => window.api.relaunchApp(), 500)
     return
   }
 
@@ -1171,7 +1173,9 @@ export async function handleData(data: Record<string, any>) {
     }
 
     window.toast.success(i18n.t('message.restore.success'))
-    setTimeout(() => window.api.relaunchApp(), 1000)
+    ;(window as any).__cherry_studio_is_importing = true
+    await window.api.flushAppData()
+    setTimeout(() => window.api.relaunchApp(), 500)
     return
   }
 

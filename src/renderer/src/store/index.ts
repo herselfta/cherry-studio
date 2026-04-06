@@ -151,6 +151,10 @@ export const useAppStore = useStore.withTypes<typeof store>()
 window.store = store
 
 export async function handleSaveData() {
+  if ((window as any).__cherry_studio_is_importing) {
+    logger.info('Skipping redux persistor flush because an import is in progress')
+    return
+  }
   logger.info('Flushing redux persistor data')
   await persistor.flush()
   logger.info('Flushed redux persistor data')

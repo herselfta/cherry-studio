@@ -2,6 +2,7 @@ import { loggerService } from '@logger'
 import db from '@renderer/databases'
 import i18n from '@renderer/i18n'
 import store, { persistor } from '@renderer/store'
+import { updateAssistants, updateDefaultAssistant } from '@renderer/store/assistants'
 import type { Assistant, Provider, Topic, WebDavConfig, WebSearchProvider } from '@renderer/types'
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
 
@@ -571,6 +572,11 @@ export async function exportMobileSyncPayload(): Promise<string> {
     }
   }
 
+  // Write state so subsequent exports assign strictly monotonically-increasing clock versions
+  // to future changes, rather than continuously resetting backwards to the current lamport.
+  writePortableSyncState(portableSyncState)
+  logger.info(`Persisted mobile sync export state at lamport ${portableSyncState.lamport}`)
+
   // Cross-device sync is intentionally separate from full migration backup:
   // it only contains the desktop/mobile overlap and must never be promoted into
   // a "full restore" artifact, otherwise importing mobile data would wipe
@@ -815,6 +821,8 @@ export async function importMobileSyncPayload(payload: string) {
         assistants: mergeById(currentAssistants.assistants, mergedAssistants)
       })
 
+      store.dispatch(updateDefaultAssistant({ assistant: syncedDefaultAssistant }))
+      store.dispatch(updateAssistants(syncedAssistants))
       localStorage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, JSON.stringify(persistedState))
 
       await db.transaction('rw', db.table('topics'), db.table('message_blocks'), db.table('settings'), async () => {
@@ -1066,6 +1074,8 @@ export async function importMobileSyncPayload(payload: string) {
         assistants: syncedAssistants
       })
 
+      store.dispatch(updateDefaultAssistant({ assistant: syncedDefaultAssistant }))
+      store.dispatch(updateAssistants(syncedAssistants))
       localStorage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, JSON.stringify(persistedState))
 
       await db.transaction('rw', db.table('topics'), db.table('message_blocks'), db.table('settings'), async () => {
@@ -1156,7 +1166,11 @@ export async function importMobileSyncPayload(payload: string) {
     }
 
     logger.info('Mobile sync payload imported. Relaunching to refresh Redux and Dexie bindings.')
-    setTimeout(() => window.api.relaunchApp(), 0)
+    ;(window as any).__cherry_studio_is_importing = true
+
+    // Forcibly flush Chromium LocalStorage backends to disk, to prevent an immediate app.quit() from losing Redux State changes.
+    await window.api.flushAppData()
+    setTimeout(() => window.api.relaunchApp(), 500)
   } catch (error) {
     persistor.persist()
     logger.info('Resumed redux persistor after mobile sync import failed.')
