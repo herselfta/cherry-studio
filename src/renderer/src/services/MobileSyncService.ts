@@ -821,8 +821,8 @@ export async function importMobileSyncPayload(payload: string) {
         assistants: mergeById(currentAssistants.assistants, mergedAssistants)
       })
 
-      store.dispatch(updateDefaultAssistant({ assistant: syncedDefaultAssistant }))
-      store.dispatch(updateAssistants(syncedAssistants))
+      store.dispatch(updateDefaultAssistant({ assistant: mergedDefaultAssistant }))
+      store.dispatch(updateAssistants(mergeById(currentAssistants.assistants, mergedAssistants)))
       localStorage.setItem(PERSISTED_REDUX_STATE_STORAGE_KEY, JSON.stringify(persistedState))
 
       await db.transaction('rw', db.table('topics'), db.table('message_blocks'), db.table('settings'), async () => {
