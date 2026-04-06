@@ -1227,6 +1227,12 @@
         "placeholder": "Buscar temas...",
         "title": "Buscar"
       },
+      "sort": {
+        "created_at": "[to be translated]:Sort by creation time",
+        "manual": "[to be translated]:Keep current order",
+        "title": "[to be translated]:Topic Sort",
+        "updated_at": "[to be translated]:Sort by update time"
+      },
       "title": "Tema",
       "unpin": "Quitar fijación"
     },
@@ -3687,6 +3693,14 @@
         "button": "Abrir registros",
         "label": "Registros de la aplicación"
       },
+      "artifact_type": {
+        "app": "[to be translated]:APP",
+        "backup_title": "[to be translated]:Choose Backup Type",
+        "cross_device_help": "[to be translated]:PC creates the full desktop migration package, while APP creates the phone sync package that only merges shared data.",
+        "cross_device_title": "[to be translated]:Cross-device Data",
+        "pc": "[to be translated]:PC",
+        "restore_title": "[to be translated]:Choose Restore Type"
+      },
       "auto_sync": {
         "help": "[to be translated]:Checks local and remote changes on the selected interval. Local changes are pushed automatically, remote changes are pulled and restored locally. If both sides change, syncing pauses and asks you to resolve the conflict.",
         "interval": {
@@ -4044,6 +4058,21 @@
           "content": "Después de cerrar sesión no podrás hacer copias de seguridad ni restaurar desde Nutstore",
           "title": "¿Seguro que quieres cerrar la sesión de Nutstore?"
         },
+        "mobile_sync": {
+          "manager": {
+            "empty": "[to be translated]:No mobile sync files found"
+          },
+          "restore": {
+            "confirm": {
+              "content": "[to be translated]:Import the mobile sync payload from Nutstore and merge it into current data?",
+              "title": "[to be translated]:Confirm Sync"
+            },
+            "success": "[to be translated]:Sync successful, the application will refresh shortly"
+          },
+          "upload": {
+            "success": "[to be translated]:Synced {{fileName}} to Nutstore"
+          }
+        },
         "new_folder": {
           "button": {
             "cancel": "Cancelar",
@@ -4256,6 +4285,7 @@
               },
               "text": "Eliminar"
             },
+            "empty": "[to be translated]:No files found",
             "fetch": {
               "error": "No se pudo obtener el archivo de copia de seguridad"
             },
@@ -4293,6 +4323,25 @@
         "maxBackups": "Número máximo de copias de seguridad",
         "minute_interval_one": "{{count}} minuto",
         "minute_interval_other": "{{count}} minutos",
+        "mobile_sync": {
+          "help": "[to be translated]:Sync only the shared desktop/mobile data subset over WebDAV without overwriting desktop-only state.",
+          "manager": {
+            "empty": "[to be translated]:No mobile sync files found",
+            "title": "[to be translated]:Mobile Sync Files"
+          },
+          "restore": {
+            "button": "[to be translated]:Sync from WebDAV",
+            "confirm": {
+              "content": "[to be translated]:Import the mobile sync payload from WebDAV and merge it into current data?",
+              "title": "[to be translated]:Confirm Sync"
+            },
+            "success": "[to be translated]:Sync successful, the application will refresh shortly"
+          },
+          "upload": {
+            "button": "[to be translated]:Sync to WebDAV",
+            "success": "[to be translated]:Synced {{fileName}} to WebDAV"
+          }
+        },
         "noSync": "Esperando la próxima copia de seguridad",
         "password": "Contraseña WebDAV",
         "path": {

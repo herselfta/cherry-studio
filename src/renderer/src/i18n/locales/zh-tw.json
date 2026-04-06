@@ -1227,6 +1227,12 @@
         "placeholder": "搜尋話題...",
         "title": "搜尋"
       },
+      "sort": {
+        "created_at": "[to be translated]:Sort by creation time",
+        "manual": "[to be translated]:Keep current order",
+        "title": "[to be translated]:Topic Sort",
+        "updated_at": "[to be translated]:Sort by update time"
+      },
       "title": "話題",
       "unpin": "取消固定"
     },
@@ -3687,6 +3693,14 @@
         "button": "開啟日誌",
         "label": "應用程式日誌"
       },
+      "artifact_type": {
+        "app": "[to be translated]:APP",
+        "backup_title": "[to be translated]:Choose Backup Type",
+        "cross_device_help": "[to be translated]:PC creates the full desktop migration package, while APP creates the phone sync package that only merges shared data.",
+        "cross_device_title": "[to be translated]:Cross-device Data",
+        "pc": "[to be translated]:PC",
+        "restore_title": "[to be translated]:Choose Restore Type"
+      },
       "auto_sync": {
         "help": "按設定間隔自動建立新的備份並上傳到目前儲存位置，不會自動拉取或恢復遠端資料。",
         "interval": {
@@ -4044,6 +4058,21 @@
           "content": "登出後將無法備份到堅果雲或從堅果雲還原。",
           "title": "確定要登出堅果雲嗎？"
         },
+        "mobile_sync": {
+          "manager": {
+            "empty": "[to be translated]:No mobile sync files found"
+          },
+          "restore": {
+            "confirm": {
+              "content": "[to be translated]:Import the mobile sync payload from Nutstore and merge it into current data?",
+              "title": "[to be translated]:Confirm Sync"
+            },
+            "success": "[to be translated]:Sync successful, the application will refresh shortly"
+          },
+          "upload": {
+            "success": "[to be translated]:Synced {{fileName}} to Nutstore"
+          }
+        },
         "new_folder": {
           "button": {
             "cancel": "取消",
@@ -4256,6 +4285,7 @@
               },
               "text": "刪除"
             },
+            "empty": "[to be translated]:No files found",
             "fetch": {
               "error": "無法取得備份檔案"
             },
@@ -4293,6 +4323,25 @@
         "maxBackups": "最大備份數量",
         "minute_interval_one": "{{count}} 分鐘",
         "minute_interval_other": "{{count}} 分鐘",
+        "mobile_sync": {
+          "help": "[to be translated]:Sync only the shared desktop/mobile data subset over WebDAV without overwriting desktop-only state.",
+          "manager": {
+            "empty": "[to be translated]:No mobile sync files found",
+            "title": "[to be translated]:Mobile Sync Files"
+          },
+          "restore": {
+            "button": "[to be translated]:Sync from WebDAV",
+            "confirm": {
+              "content": "[to be translated]:Import the mobile sync payload from WebDAV and merge it into current data?",
+              "title": "[to be translated]:Confirm Sync"
+            },
+            "success": "[to be translated]:Sync successful, the application will refresh shortly"
+          },
+          "upload": {
+            "button": "[to be translated]:Sync to WebDAV",
+            "success": "[to be translated]:Synced {{fileName}} to WebDAV"
+          }
+        },
         "noSync": "等待下次備份",
         "password": "WebDAV 密碼",
         "path": {

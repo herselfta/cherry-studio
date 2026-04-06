@@ -1188,12 +1188,6 @@
         "yuque": "导出到语雀"
       },
       "list": "话题列表",
-      "sort": {
-        "created_at": "按创建时间排序",
-        "manual": "按当前顺序",
-        "title": "话题排序",
-        "updated_at": "按更新时间排序"
-      },
       "manage": {
         "clear_selection": "取消选择",
         "delete": {
@@ -1232,6 +1226,12 @@
       "search": {
         "placeholder": "搜索话题...",
         "title": "搜索"
+      },
+      "sort": {
+        "created_at": "按创建时间排序",
+        "manual": "按当前顺序",
+        "title": "话题排序",
+        "updated_at": "按更新时间排序"
       },
       "title": "话题",
       "unpin": "取消固定"
@@ -3693,6 +3693,14 @@
         "button": "打开日志",
         "label": "应用日志"
       },
+      "artifact_type": {
+        "app": "APP",
+        "backup_title": "选择备份方式",
+        "cross_device_help": "PC 会生成桌面完整迁移包，APP 会生成仅同步公共项的手机同步包。",
+        "cross_device_title": "跨设备数据",
+        "pc": "PC",
+        "restore_title": "选择恢复方式"
+      },
       "auto_sync": {
         "help": "按设定间隔自动创建新的备份并上传到当前存储位置，不会自动拉取或恢复远端数据。",
         "interval": {
@@ -3825,14 +3833,6 @@
           "transfer_progress": "传输进度"
         },
         "title": "导出至手机"
-      },
-      "artifact_type": {
-        "app": "APP",
-        "backup_title": "选择备份方式",
-        "cross_device_help": "PC 会生成桌面完整迁移包，APP 会生成仅同步公共项的手机同步包。",
-        "cross_device_title": "跨设备数据",
-        "pc": "PC",
-        "restore_title": "选择恢复方式"
       },
       "hour_interval_one": "{{count}} 小时",
       "hour_interval_other": "{{count}} 小时",
@@ -4058,6 +4058,21 @@
           "content": "退出后将无法备份至坚果云和从坚果云恢复",
           "title": "确定要退出坚果云登录？"
         },
+        "mobile_sync": {
+          "manager": {
+            "empty": "未找到手机同步文件"
+          },
+          "restore": {
+            "confirm": {
+              "content": "将从坚果云导入手机同步数据并合并到当前数据，是否继续？",
+              "title": "确认同步"
+            },
+            "success": "同步成功，应用将在几秒后刷新"
+          },
+          "upload": {
+            "success": "已将 {{fileName}} 同步到坚果云"
+          }
+        },
         "new_folder": {
           "button": {
             "cancel": "取消",
@@ -4074,21 +4089,6 @@
           "currentPath": "当前路径",
           "return": "返回",
           "title": "坚果云存储路径"
-        },
-        "mobile_sync": {
-          "manager": {
-            "empty": "未找到手机同步文件"
-          },
-          "restore": {
-            "confirm": {
-              "content": "将从坚果云导入手机同步数据并合并到当前数据，是否继续？",
-              "title": "确认同步"
-            },
-            "success": "同步成功，应用将在几秒后刷新"
-          },
-          "upload": {
-            "success": "已将 {{fileName}} 同步到坚果云"
-          }
         },
         "restore": {
           "button": "从坚果云恢复",
@@ -4285,6 +4285,7 @@
               },
               "text": "删除"
             },
+            "empty": "暂无可用文件",
             "fetch": {
               "error": "获取备份文件失败"
             },
@@ -4299,7 +4300,6 @@
                 "delete": "请选择要删除的备份文件"
               }
             },
-            "empty": "暂无可用文件",
             "title": "备份数据管理"
           },
           "modal": {
@@ -4309,6 +4309,20 @@
             "title": "备份到 WebDAV"
           }
         },
+        "disableStream": {
+          "help": "开启后，将文件加载到内存中再上传，可解决部分WebDAV服务不兼容chunked上传的问题，但会增加内存占用。",
+          "title": "禁用流式上传"
+        },
+        "host": {
+          "label": "WebDAV 地址",
+          "placeholder": "http://localhost:8080"
+        },
+        "hour_interval_one": "{{count}} 小时",
+        "hour_interval_other": "{{count}} 小时",
+        "lastSync": "上次备份时间",
+        "maxBackups": "最大备份数",
+        "minute_interval_one": "{{count}} 分钟",
+        "minute_interval_other": "{{count}} 分钟",
         "mobile_sync": {
           "help": "通过 WebDAV 同步桌面端与手机端都能识别的公共数据，不会覆盖桌面端专属配置。",
           "manager": {
@@ -4328,20 +4342,6 @@
             "success": "已将 {{fileName}} 同步到 WebDAV"
           }
         },
-        "disableStream": {
-          "help": "开启后，将文件加载到内存中再上传，可解决部分WebDAV服务不兼容chunked上传的问题，但会增加内存占用。",
-          "title": "禁用流式上传"
-        },
-        "host": {
-          "label": "WebDAV 地址",
-          "placeholder": "http://localhost:8080"
-        },
-        "hour_interval_one": "{{count}} 小时",
-        "hour_interval_other": "{{count}} 小时",
-        "lastSync": "上次备份时间",
-        "maxBackups": "最大备份数",
-        "minute_interval_one": "{{count}} 分钟",
-        "minute_interval_other": "{{count}} 分钟",
         "noSync": "等待下次备份",
         "password": "WebDAV 密码",
         "path": {

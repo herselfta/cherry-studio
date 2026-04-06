@@ -1188,12 +1188,6 @@
         "yuque": "Export to Yuque"
       },
       "list": "Topic List",
-      "sort": {
-        "created_at": "Sort by creation time",
-        "manual": "Keep current order",
-        "title": "Topic Sort",
-        "updated_at": "Sort by update time"
-      },
       "manage": {
         "clear_selection": "Clear Selection",
         "delete": {
@@ -1232,6 +1226,12 @@
       "search": {
         "placeholder": "Search topics...",
         "title": "Search"
+      },
+      "sort": {
+        "created_at": "Sort by creation time",
+        "manual": "Keep current order",
+        "title": "Topic Sort",
+        "updated_at": "Sort by update time"
       },
       "title": "Topics",
       "unpin": "Unpin Topic"
@@ -3693,6 +3693,14 @@
         "button": "Open Logs",
         "label": "App Logs"
       },
+      "artifact_type": {
+        "app": "APP",
+        "backup_title": "Choose Backup Type",
+        "cross_device_help": "PC creates the full desktop migration package, while APP creates the phone sync package that only merges shared data.",
+        "cross_device_title": "Cross-device Data",
+        "pc": "PC",
+        "restore_title": "Choose Restore Type"
+      },
       "auto_sync": {
         "help": "Automatically creates a new backup on the selected interval and uploads it to the current storage target. It does not pull or restore remote data automatically.",
         "interval": {
@@ -3825,14 +3833,6 @@
           "transfer_progress": "Transfer progress"
         },
         "title": "Export to phone"
-      },
-      "artifact_type": {
-        "app": "APP",
-        "backup_title": "Choose Backup Type",
-        "cross_device_help": "PC creates the full desktop migration package, while APP creates the phone sync package that only merges shared data.",
-        "cross_device_title": "Cross-device Data",
-        "pc": "PC",
-        "restore_title": "Choose Restore Type"
       },
       "hour_interval_one": "{{count}} hour",
       "hour_interval_other": "{{count}} hours",
@@ -4058,6 +4058,21 @@
           "content": "After logout, you will not be able to backup to Nutstore or restore from Nutstore.",
           "title": "Are you sure you want to logout from Nutstore?"
         },
+        "mobile_sync": {
+          "manager": {
+            "empty": "No mobile sync files found"
+          },
+          "restore": {
+            "confirm": {
+              "content": "Import the mobile sync payload from Nutstore and merge it into current data?",
+              "title": "Confirm Sync"
+            },
+            "success": "Sync successful, the application will refresh shortly"
+          },
+          "upload": {
+            "success": "Synced {{fileName}} to Nutstore"
+          }
+        },
         "new_folder": {
           "button": {
             "cancel": "Cancel",
@@ -4074,21 +4089,6 @@
           "currentPath": "Current Path",
           "return": "Return",
           "title": "Nutstore Storage Path"
-        },
-        "mobile_sync": {
-          "manager": {
-            "empty": "No mobile sync files found"
-          },
-          "restore": {
-            "confirm": {
-              "content": "Import the mobile sync payload from Nutstore and merge it into current data?",
-              "title": "Confirm Sync"
-            },
-            "success": "Sync successful, the application will refresh shortly"
-          },
-          "upload": {
-            "success": "Synced {{fileName}} to Nutstore"
-          }
         },
         "restore": {
           "button": "Restore from Nutstore",
@@ -4285,6 +4285,7 @@
               },
               "text": "Delete"
             },
+            "empty": "No files found",
             "fetch": {
               "error": "Failed to get backup files"
             },
@@ -4299,7 +4300,6 @@
                 "delete": "Please select backup files to delete"
               }
             },
-            "empty": "No files found",
             "title": "Backup Data Management"
           },
           "modal": {
@@ -4309,6 +4309,20 @@
             "title": "Backup to WebDAV"
           }
         },
+        "disableStream": {
+          "help": "When enabled, loads the file into memory before uploading. This can solve incompatibility issues with some WebDAV servers that do not support chunked uploads, but it will increase memory usage.",
+          "title": "Disable Stream Upload"
+        },
+        "host": {
+          "label": "WebDAV Host",
+          "placeholder": "http://localhost:8080"
+        },
+        "hour_interval_one": "{{count}} hour",
+        "hour_interval_other": "{{count}} hours",
+        "lastSync": "Last Backup",
+        "maxBackups": "Maximum Backups",
+        "minute_interval_one": "{{count}} minute",
+        "minute_interval_other": "{{count}} minutes",
         "mobile_sync": {
           "help": "Sync only the shared desktop/mobile data subset over WebDAV without overwriting desktop-only state.",
           "manager": {
@@ -4328,20 +4342,6 @@
             "success": "Synced {{fileName}} to WebDAV"
           }
         },
-        "disableStream": {
-          "help": "When enabled, loads the file into memory before uploading. This can solve incompatibility issues with some WebDAV servers that do not support chunked uploads, but it will increase memory usage.",
-          "title": "Disable Stream Upload"
-        },
-        "host": {
-          "label": "WebDAV Host",
-          "placeholder": "http://localhost:8080"
-        },
-        "hour_interval_one": "{{count}} hour",
-        "hour_interval_other": "{{count}} hours",
-        "lastSync": "Last Backup",
-        "maxBackups": "Maximum Backups",
-        "minute_interval_one": "{{count}} minute",
-        "minute_interval_other": "{{count}} minutes",
         "noSync": "Waiting for next backup",
         "password": "WebDAV Password",
         "path": {

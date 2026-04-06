@@ -1227,6 +1227,12 @@
         "placeholder": "Caută subiecte...",
         "title": "Caută"
       },
+      "sort": {
+        "created_at": "[to be translated]:Sort by creation time",
+        "manual": "[to be translated]:Keep current order",
+        "title": "[to be translated]:Topic Sort",
+        "updated_at": "[to be translated]:Sort by update time"
+      },
       "title": "Subiecte",
       "unpin": "Detașează subiectul"
     },
@@ -3687,6 +3693,14 @@
         "button": "Deschide jurnalele",
         "label": "Jurnale aplicație"
       },
+      "artifact_type": {
+        "app": "[to be translated]:APP",
+        "backup_title": "[to be translated]:Choose Backup Type",
+        "cross_device_help": "[to be translated]:PC creates the full desktop migration package, while APP creates the phone sync package that only merges shared data.",
+        "cross_device_title": "[to be translated]:Cross-device Data",
+        "pc": "[to be translated]:PC",
+        "restore_title": "[to be translated]:Choose Restore Type"
+      },
       "auto_sync": {
         "help": "[to be translated]:Checks local and remote changes on the selected interval. Local changes are pushed automatically, remote changes are pulled and restored locally. If both sides change, syncing pauses and asks you to resolve the conflict.",
         "interval": {
@@ -4044,6 +4058,21 @@
           "content": "După deconectare, nu vei mai putea face backup în Nutstore sau restaura din Nutstore.",
           "title": "Ești sigur că vrei să te deconectezi de la Nutstore?"
         },
+        "mobile_sync": {
+          "manager": {
+            "empty": "[to be translated]:No mobile sync files found"
+          },
+          "restore": {
+            "confirm": {
+              "content": "[to be translated]:Import the mobile sync payload from Nutstore and merge it into current data?",
+              "title": "[to be translated]:Confirm Sync"
+            },
+            "success": "[to be translated]:Sync successful, the application will refresh shortly"
+          },
+          "upload": {
+            "success": "[to be translated]:Synced {{fileName}} to Nutstore"
+          }
+        },
         "new_folder": {
           "button": {
             "cancel": "Anulează",
@@ -4256,6 +4285,7 @@
               },
               "text": "Șterge"
             },
+            "empty": "[to be translated]:No files found",
             "fetch": {
               "error": "Nu s-au putut obține fișierele de backup"
             },
@@ -4293,6 +4323,25 @@
         "maxBackups": "Backup-uri maxime",
         "minute_interval_one": "{{count}} minut",
         "minute_interval_other": "{{count}} minute",
+        "mobile_sync": {
+          "help": "[to be translated]:Sync only the shared desktop/mobile data subset over WebDAV without overwriting desktop-only state.",
+          "manager": {
+            "empty": "[to be translated]:No mobile sync files found",
+            "title": "[to be translated]:Mobile Sync Files"
+          },
+          "restore": {
+            "button": "[to be translated]:Sync from WebDAV",
+            "confirm": {
+              "content": "[to be translated]:Import the mobile sync payload from WebDAV and merge it into current data?",
+              "title": "[to be translated]:Confirm Sync"
+            },
+            "success": "[to be translated]:Sync successful, the application will refresh shortly"
+          },
+          "upload": {
+            "button": "[to be translated]:Sync to WebDAV",
+            "success": "[to be translated]:Synced {{fileName}} to WebDAV"
+          }
+        },
         "noSync": "Se așteaptă următorul backup",
         "password": "Parolă WebDAV",
         "path": {
