@@ -309,7 +309,16 @@ const SelectModelPopupView: React.FC<Props> = ({
         })
       }
     }
-  }, [isLoading, listHeight, listItems, modelItems, searchText, selectedProviderIds.length, selectedTags.length, setFocusedItemKey])
+  }, [
+    isLoading,
+    listHeight,
+    listItems,
+    modelItems,
+    searchText,
+    selectedProviderIds.length,
+    selectedTags.length,
+    setFocusedItemKey
+  ])
 
   const handleItemClick = useCallback(
     (item: FlatListItem) => {

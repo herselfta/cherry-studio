@@ -19,6 +19,7 @@ import {
 } from './mobileSyncUtils'
 import {
   bootstrapPortableSyncState,
+  diagnosePortableSyncVersionDrift,
   hasPortableSyncHistory,
   type PortableSyncMetadata,
   type PortableSyncVersion,
@@ -303,11 +304,7 @@ function summarizeAssistantTopics(assistantsState: ReturnType<typeof store.getSt
   }
 }
 
-function summarizeDesktopConversationSnapshot(
-  topics: Topic[],
-  messages: Message[],
-  messageBlocks: MessageBlock[]
-) {
+function summarizeDesktopConversationSnapshot(topics: Topic[], messages: Message[], messageBlocks: MessageBlock[]) {
   return {
     topicCount: topics.length,
     messageCount: messages.length,
@@ -802,13 +799,15 @@ export async function importMobileSyncPayload(payload: string) {
     }
 
     if (!isVersionedSync) {
-      const { assistants: mergedAssistants, defaultAssistant: mergedDefaultAssistant } = buildDesktopSyncAssistantState({
-        currentDefaultAssistant: currentAssistants.defaultAssistant,
-        currentAssistants: currentAssistants.assistants,
-        incomingDefaultAssistant,
-        incomingAssistants,
-        normalizedTopics
-      })
+      const { assistants: mergedAssistants, defaultAssistant: mergedDefaultAssistant } = buildDesktopSyncAssistantState(
+        {
+          currentDefaultAssistant: currentAssistants.defaultAssistant,
+          currentAssistants: currentAssistants.assistants,
+          incomingDefaultAssistant,
+          incomingAssistants,
+          normalizedTopics
+        }
+      )
 
       writePersistedSlice(persistedState, 'assistants', {
         ...currentAssistants,
@@ -874,15 +873,37 @@ export async function importMobileSyncPayload(payload: string) {
       }
       const existingSyncState = readPortableSyncState(localStorage)
       const isBootstrapImport = !hasPortableSyncHistory(existingSyncState)
-      const localSyncState = isBootstrapImport
+      const preparedLocalSyncState = isBootstrapImport
         ? bootstrapPortableSyncState(currentSnapshot, parsed.sync!, localStorage)
         : preparePortableSyncState(currentSnapshot, localStorage, parsed.sync!.frontier)
+      const lineageDrift = isBootstrapImport
+        ? undefined
+        : diagnosePortableSyncVersionDrift({
+            currentTopics,
+            incomingTopics: normalizedTopics,
+            currentMessages: currentConversation.messages,
+            incomingMessages,
+            currentMessageBlocks,
+            incomingMessageBlocks: portableMessageBlocks,
+            localState: preparedLocalSyncState,
+            incomingSync: parsed.sync!
+          })
+      const shouldRebootstrapLineage = Boolean(lineageDrift?.suspected)
+      const localSyncState = shouldRebootstrapLineage
+        ? bootstrapPortableSyncState(currentSnapshot, parsed.sync!, localStorage)
+        : preparedLocalSyncState
+      const preferIncomingOnEqualVersion = isBootstrapImport || shouldRebootstrapLineage
 
       logger.info(
         `Desktop mobile sync local snapshot before merge ${stringifyPortableSyncDebug({
-          snapshot: summarizeDesktopConversationSnapshot(currentTopics, currentConversation.messages, currentMessageBlocks),
+          snapshot: summarizeDesktopConversationSnapshot(
+            currentTopics,
+            currentConversation.messages,
+            currentMessageBlocks
+          ),
           sync: summarizePortableSyncMetadata(toPortableSyncMetadata(localSyncState)),
-          isBootstrapImport
+          isBootstrapImport,
+          lineageDrift
         })}`,
         { logToMain: true }
       )
@@ -898,6 +919,15 @@ export async function importMobileSyncPayload(payload: string) {
         })
       }
 
+      if (shouldRebootstrapLineage && lineageDrift) {
+        logger.warn(
+          `Rebootstrapped portable sync lineage after detecting suspicious local version drift ${stringifyPortableSyncDebug(
+            lineageDrift
+          )}`,
+          { logToMain: true }
+        )
+      }
+
       const resolvedConversation = resolvePortableSyncSnapshot({
         currentTopics,
         incomingTopics: normalizedTopics,
@@ -907,12 +937,12 @@ export async function importMobileSyncPayload(payload: string) {
         incomingMessageBlocks: portableMessageBlocks,
         localState: localSyncState,
         incomingSync: parsed.sync!,
-        preferIncomingOnEqualVersion: isBootstrapImport
+        preferIncomingOnEqualVersion
       })
       logger.info('Versioned mobile sync merge samples', {
         sourceDeviceId: parsed.sourceDeviceId,
         replicaId: parsed.sync?.replicaId,
-        isBootstrapImport,
+        isBootstrapImport: preferIncomingOnEqualVersion,
         topicSamples: buildPortableEntityMergeSamples({
           current: currentTopics,
           incoming: normalizedTopics,
@@ -1019,14 +1049,16 @@ export async function importMobileSyncPayload(payload: string) {
         })}`,
         { logToMain: true }
       )
-      const { assistants: syncedAssistants, defaultAssistant: syncedDefaultAssistant } = buildDesktopSyncAssistantState({
-        currentDefaultAssistant: currentAssistants.defaultAssistant,
-        currentAssistants: currentAssistants.assistants,
-        incomingDefaultAssistant,
-        incomingAssistants,
-        normalizedTopics: resolvedConversation.topics,
-        replaceTopics: true
-      })
+      const { assistants: syncedAssistants, defaultAssistant: syncedDefaultAssistant } = buildDesktopSyncAssistantState(
+        {
+          currentDefaultAssistant: currentAssistants.defaultAssistant,
+          currentAssistants: currentAssistants.assistants,
+          incomingDefaultAssistant,
+          incomingAssistants,
+          normalizedTopics: resolvedConversation.topics,
+          replaceTopics: true
+        }
+      )
 
       writePersistedSlice(persistedState, 'assistants', {
         ...currentAssistants,

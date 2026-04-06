@@ -1,12 +1,13 @@
 import { loggerService } from '@logger'
 import type { Topic } from '@renderer/types'
-import { type Message, type MessageBlock,MessageBlockType } from '@renderer/types/newMessage'
+import { type Message, type MessageBlock, MessageBlockType } from '@renderer/types/newMessage'
 
 import { getOrCreateMobileSyncSourceDeviceId } from './mobileSyncLedger'
 
 const logger = loggerService.withContext('PortableSyncState')
 
 export const PORTABLE_SYNC_STATE_STORAGE_KEY = 'portable_sync_state_v3'
+export const PORTABLE_SYNC_FINGERPRINT_VERSION = 2
 
 export type PortableSyncVersion = {
   replicaId: string
@@ -43,6 +44,7 @@ type PortableSyncFingerprints = {
 }
 
 export type PortableSyncState = PortableSyncMetadata & {
+  fingerprintVersion: number
   fingerprints: PortableSyncFingerprints
 }
 
@@ -74,6 +76,18 @@ export type ResolvePortableSyncSnapshotResult = {
   syncState: PortableSyncState
 }
 
+export type PortableSyncDriftDiagnosis = {
+  suspected: boolean
+  localReplicaId: string
+  knownIncomingLamport: number
+  localLamport: number
+  lamportGap: number
+  trackedSharedEntityCount: number
+  inflatedEntityCount: number
+  identicalInflatedEntityCount: number
+  tombstonedInflatedEntityCount: number
+}
+
 function createEmptyEntityVersions(): PortableSyncEntityVersions {
   return {
     topics: {},
@@ -99,6 +113,7 @@ function createEmptyPortableSyncState(replicaId: string): PortableSyncState {
     entityVersions: createEmptyEntityVersions(),
     messageSlots: {},
     tombstones: createEmptyEntityVersions(),
+    fingerprintVersion: PORTABLE_SYNC_FINGERPRINT_VERSION,
     fingerprints: createEmptyFingerprints()
   }
 }
@@ -156,10 +171,10 @@ function normalizeEntityVersions(value: PortableSyncEntityVersions | undefined):
 
 function normalizeFingerprints(value: PortableSyncFingerprints | undefined): PortableSyncFingerprints {
   return {
-    topics: { ...(value?.topics || {}) },
-    messages: { ...(value?.messages || {}) },
-    blocks: { ...(value?.blocks || {}) },
-    messageSlots: { ...(value?.messageSlots || {}) }
+    topics: { ...value?.topics },
+    messages: { ...value?.messages },
+    blocks: { ...value?.blocks },
+    messageSlots: { ...value?.messageSlots }
   }
 }
 
@@ -185,7 +200,7 @@ function normalizeMessageSlots(
 }
 
 function normalizeFrontier(value: Record<string, number> | undefined, replicaId: string, lamport: number) {
-  const frontier = { ...(value || {}) }
+  const frontier = { ...value }
   frontier[replicaId] = Math.max(frontier[replicaId] || 0, lamport)
   return frontier
 }
@@ -208,6 +223,7 @@ export function readPortableSyncState(storage: Storage = localStorage): Portable
       entityVersions: normalizeEntityVersions(parsed.entityVersions),
       messageSlots: normalizeMessageSlots(parsed.messageSlots),
       tombstones: normalizeEntityVersions(parsed.tombstones),
+      fingerprintVersion: typeof parsed.fingerprintVersion === 'number' ? parsed.fingerprintVersion : 0,
       fingerprints: normalizeFingerprints(parsed.fingerprints)
     }
   } catch (error) {
@@ -465,6 +481,7 @@ function cloneState(state: PortableSyncState): PortableSyncState {
     entityVersions: normalizeEntityVersions(state.entityVersions),
     messageSlots: normalizeMessageSlots(state.messageSlots),
     tombstones: normalizeEntityVersions(state.tombstones),
+    fingerprintVersion: state.fingerprintVersion,
     fingerprints: normalizeFingerprints(state.fingerprints)
   }
 }
@@ -482,6 +499,7 @@ function createPortableSyncStateFromMetadata(
     entityVersions: normalizeEntityVersions(incomingSync.entityVersions),
     messageSlots: normalizeMessageSlots(incomingSync.messageSlots),
     tombstones: normalizeEntityVersions(incomingSync.tombstones),
+    fingerprintVersion: PORTABLE_SYNC_FINGERPRINT_VERSION,
     fingerprints: createEmptyFingerprints()
   }
   const activeTopicIds = new Set(
@@ -514,16 +532,40 @@ function createPortableSyncStateFromMetadata(
 
   nextState.fingerprints = {
     topics: Object.fromEntries(
-      snapshot.topics.filter((topic) => activeTopicIds.has(topic.id)).map((topic) => [topic.id, fingerprintTopic(topic)])
+      snapshot.topics
+        .filter((topic) => activeTopicIds.has(topic.id))
+        .map((topic) => [topic.id, fingerprintTopic(topic)])
     ),
     messages: Object.fromEntries(activeMessages.map((message) => [message.id, fingerprintMessage(message)])),
     blocks: Object.fromEntries(activeBlocks.map((block) => [block.id, fingerprintMessageBlock(block)])),
     messageSlots: Object.fromEntries(
-      [...trackedSlotKeys].map((slotKey) => [slotKey, currentSlots[slotKey] || nextState.messageSlots[slotKey]?.messageId || ''])
+      [...trackedSlotKeys].map((slotKey) => [
+        slotKey,
+        currentSlots[slotKey] || nextState.messageSlots[slotKey]?.messageId || ''
+      ])
     )
   }
 
   return nextState
+}
+
+function migratePortableSyncFingerprints(state: PortableSyncState, snapshot: PortableSyncSnapshot) {
+  if (state.fingerprintVersion >= PORTABLE_SYNC_FINGERPRINT_VERSION) {
+    return state
+  }
+
+  const currentSlots = buildPortableMessageSlots(snapshot.messages)
+
+  return {
+    ...state,
+    fingerprintVersion: PORTABLE_SYNC_FINGERPRINT_VERSION,
+    fingerprints: {
+      topics: Object.fromEntries(snapshot.topics.map((topic) => [topic.id, fingerprintTopic(topic)])),
+      messages: Object.fromEntries(snapshot.messages.map((message) => [message.id, fingerprintMessage(message)])),
+      blocks: Object.fromEntries(snapshot.messageBlocks.map((block) => [block.id, fingerprintMessageBlock(block)])),
+      messageSlots: currentSlots
+    }
+  }
 }
 
 export function bootstrapPortableSyncState(
@@ -618,7 +660,7 @@ export function preparePortableSyncState(
   storage: Storage = localStorage,
   incomingFrontier?: Record<string, number>
 ): PortableSyncState {
-  const state = cloneState(readPortableSyncState(storage))
+  const state = migratePortableSyncFingerprints(cloneState(readPortableSyncState(storage)), snapshot)
 
   // Advance the local Lamport clock to incorporate the incoming device's frontier BEFORE
   // computing new entity versions or tombstones. Without this, locally-deleted topics get
@@ -682,6 +724,147 @@ export function preparePortableSyncState(
   writePortableSyncState(state, storage)
 
   return state
+}
+
+type PortableSyncDriftCounters = {
+  trackedSharedCount: number
+  inflatedCount: number
+  identicalInflatedCount: number
+  tombstonedInflatedCount: number
+}
+
+function collectPortableSyncDriftCounters<T extends { id: string }>(
+  currentItems: T[],
+  incomingItems: T[],
+  localVersions: PortableSyncVersionMap,
+  incomingVersions: PortableSyncVersionMap,
+  incomingTombstones: PortableSyncVersionMap,
+  fingerprintItem: (item: T) => string,
+  localReplicaId: string,
+  knownIncomingLamport: number
+): PortableSyncDriftCounters {
+  const currentMap = new Map(currentItems.map((item) => [item.id, item]))
+  const incomingMap = new Map(incomingItems.map((item) => [item.id, item]))
+  const remoteKnownIds = new Set<string>([...Object.keys(incomingVersions), ...Object.keys(incomingTombstones)])
+
+  let trackedSharedCount = 0
+  let inflatedCount = 0
+  let identicalInflatedCount = 0
+  let tombstonedInflatedCount = 0
+
+  for (const id of remoteKnownIds) {
+    const localVersion = localVersions[id]
+    if (!localVersion) {
+      continue
+    }
+
+    trackedSharedCount += 1
+
+    if (localVersion.replicaId !== localReplicaId || localVersion.lamport <= knownIncomingLamport) {
+      continue
+    }
+
+    inflatedCount += 1
+
+    const incomingVersion = incomingVersions[id]
+    const incomingTombstone = incomingTombstones[id]
+    if (
+      incomingTombstone &&
+      (!incomingVersion || comparePortableSyncVersions(incomingTombstone, incomingVersion) >= 0)
+    ) {
+      tombstonedInflatedCount += 1
+      continue
+    }
+
+    const currentItem = currentMap.get(id)
+    const incomingItem = incomingMap.get(id)
+    if (currentItem && incomingItem && fingerprintItem(currentItem) === fingerprintItem(incomingItem)) {
+      identicalInflatedCount += 1
+    }
+  }
+
+  return {
+    trackedSharedCount,
+    inflatedCount,
+    identicalInflatedCount,
+    tombstonedInflatedCount
+  }
+}
+
+export function diagnosePortableSyncVersionDrift({
+  currentTopics,
+  incomingTopics,
+  currentMessages,
+  incomingMessages,
+  currentMessageBlocks,
+  incomingMessageBlocks,
+  localState,
+  incomingSync
+}: ResolvePortableSyncSnapshotParams): PortableSyncDriftDiagnosis {
+  const localReplicaId = localState.replicaId
+  const knownIncomingLamport = incomingSync.frontier[localReplicaId] || 0
+  const topicCounters = collectPortableSyncDriftCounters(
+    currentTopics,
+    incomingTopics,
+    localState.entityVersions.topics,
+    incomingSync.entityVersions.topics,
+    incomingSync.tombstones.topics,
+    fingerprintTopic,
+    localReplicaId,
+    knownIncomingLamport
+  )
+  const messageCounters = collectPortableSyncDriftCounters(
+    currentMessages,
+    incomingMessages,
+    localState.entityVersions.messages,
+    incomingSync.entityVersions.messages,
+    incomingSync.tombstones.messages,
+    fingerprintMessage,
+    localReplicaId,
+    knownIncomingLamport
+  )
+  const blockCounters = collectPortableSyncDriftCounters(
+    currentMessageBlocks,
+    incomingMessageBlocks,
+    localState.entityVersions.blocks,
+    incomingSync.entityVersions.blocks,
+    incomingSync.tombstones.blocks,
+    fingerprintMessageBlock,
+    localReplicaId,
+    knownIncomingLamport
+  )
+
+  const trackedSharedEntityCount =
+    topicCounters.trackedSharedCount + messageCounters.trackedSharedCount + blockCounters.trackedSharedCount
+  const inflatedEntityCount = topicCounters.inflatedCount + messageCounters.inflatedCount + blockCounters.inflatedCount
+  const identicalInflatedEntityCount =
+    topicCounters.identicalInflatedCount + messageCounters.identicalInflatedCount + blockCounters.identicalInflatedCount
+  const tombstonedInflatedEntityCount =
+    topicCounters.tombstonedInflatedCount +
+    messageCounters.tombstonedInflatedCount +
+    blockCounters.tombstonedInflatedCount
+  const lamportGap = Math.max(0, localState.lamport - knownIncomingLamport)
+
+  const suspected = Boolean(
+    knownIncomingLamport > 0 &&
+      lamportGap >= 64 &&
+      inflatedEntityCount >= 32 &&
+      trackedSharedEntityCount > 0 &&
+      inflatedEntityCount * 4 >= trackedSharedEntityCount &&
+      (identicalInflatedEntityCount + tombstonedInflatedEntityCount) * 2 >= inflatedEntityCount
+  )
+
+  return {
+    suspected,
+    localReplicaId,
+    knownIncomingLamport,
+    localLamport: localState.lamport,
+    lamportGap,
+    trackedSharedEntityCount,
+    inflatedEntityCount,
+    identicalInflatedEntityCount,
+    tombstonedInflatedEntityCount
+  }
 }
 
 function mergeFrontier(left: Record<string, number>, right: Record<string, number>) {

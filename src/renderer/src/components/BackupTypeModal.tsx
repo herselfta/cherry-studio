@@ -44,7 +44,10 @@ const BackupTypeModal: FC<BackupTypeModalProps> = ({
 
   return (
     <Modal
-      title={customLabels?.title || t(mode === 'backup' ? 'settings.data.artifact_type.backup_title' : 'settings.data.artifact_type.restore_title')}
+      title={
+        customLabels?.title ||
+        t(mode === 'backup' ? 'settings.data.artifact_type.backup_title' : 'settings.data.artifact_type.restore_title')
+      }
       open={open}
       onOk={onConfirm}
       onCancel={onCancel}
@@ -68,9 +71,7 @@ const BackupTypeModal: FC<BackupTypeModalProps> = ({
           style={{ marginTop: 16 }}
           value={fileName}
           onChange={(event) => onFileNameChange(event.target.value)}
-          placeholder={
-            customLabels?.filenamePlaceholder || t('settings.data.local.backup.modal.filename.placeholder')
-          }
+          placeholder={customLabels?.filenamePlaceholder || t('settings.data.local.backup.modal.filename.placeholder')}
         />
       )}
     </Modal>

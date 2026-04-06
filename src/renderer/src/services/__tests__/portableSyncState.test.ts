@@ -1,9 +1,18 @@
 import type { Topic } from '@renderer/types'
-import { AssistantMessageStatus, type Message, MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
+import {
+  AssistantMessageStatus,
+  type MainTextMessageBlock,
+  type Message,
+  type MessageBlock,
+  MessageBlockStatus,
+  MessageBlockType
+} from '@renderer/types/newMessage'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
   bootstrapPortableSyncState,
+  diagnosePortableSyncVersionDrift,
+  PORTABLE_SYNC_STATE_STORAGE_KEY,
   preparePortableSyncState,
   resolvePortableSyncSnapshot,
   toPortableSyncMetadata
@@ -24,6 +33,7 @@ vi.mock('../mobileSyncLedger', () => ({
 }))
 
 const MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY = 'mobile_sync_source_device_id'
+type TestMessage = Message & { content?: string }
 
 function createMemoryStorage(): Storage {
   const state = new Map<string, string>()
@@ -52,31 +62,33 @@ function createMemoryStorage(): Storage {
 
 function createTopic(overrides: Partial<Topic> & Pick<Topic, 'id' | 'assistantId'>): Topic {
   return {
+    messages: [],
+    ...overrides,
     id: overrides.id,
     assistantId: overrides.assistantId,
     name: overrides.name || overrides.id,
     createdAt: overrides.createdAt || '2026-03-29T00:00:00.000Z',
-    updatedAt: overrides.updatedAt || '2026-03-29T00:00:00.000Z',
-    messages: [],
-    ...overrides
+    updatedAt: overrides.updatedAt || '2026-03-29T00:00:00.000Z'
   }
 }
 
-function createMessage(overrides: Partial<Message> & Pick<Message, 'id' | 'assistantId' | 'topicId'>): Message {
+function createMessage(
+  overrides: Partial<TestMessage> & Pick<Message, 'id' | 'assistantId' | 'topicId'>
+): TestMessage {
   return {
+    role: 'assistant',
+    status: AssistantMessageStatus.SUCCESS,
+    blocks: [],
+    ...overrides,
     id: overrides.id,
     assistantId: overrides.assistantId,
     topicId: overrides.topicId,
-    role: 'assistant',
     createdAt: overrides.createdAt || '2026-03-29T00:00:00.000Z',
-    updatedAt: overrides.updatedAt,
-    status: AssistantMessageStatus.SUCCESS,
-    blocks: [],
-    ...overrides
+    updatedAt: overrides.updatedAt
   }
 }
 
-function createBlock(messageId: string, id = `block:${messageId}`) {
+function createBlock(messageId: string, id = `block:${messageId}`): MainTextMessageBlock {
   return {
     id,
     messageId,
@@ -517,8 +529,7 @@ describe('portableSyncState', () => {
     const baseBlock = {
       ...createBlock(baseMessage.id, 'shared-block'),
       content: 'original block',
-      updatedAt: undefined,
-      file: undefined
+      updatedAt: undefined
     } satisfies MessageBlock
 
     preparePortableSyncState(
@@ -672,7 +683,11 @@ describe('portableSyncState', () => {
       messages: [appSharedMessage, appNewMessage],
       messageBlocks: [appSharedBlock, appNewBlock]
     }
-    const appState = preparePortableSyncState(appSnapshot, appStorage, toPortableSyncMetadata(desktopSeedState).frontier)
+    const appState = preparePortableSyncState(
+      appSnapshot,
+      appStorage,
+      toPortableSyncMetadata(desktopSeedState).frontier
+    )
 
     const desktopLocalState = preparePortableSyncState(
       initialDesktopSnapshot,
@@ -855,6 +870,218 @@ describe('portableSyncState', () => {
     expect(result.deletedMessageIds).toContain('assistant-old')
   })
 
+  it('migrates legacy fingerprint state without inflating tracked versions', () => {
+    const storage = createMemoryStorage()
+    storage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'desktop-a')
+
+    const snapshot = {
+      topics: [createTopic({ id: 'shared-topic', assistantId: 'default', name: 'shared' })],
+      messages: [
+        createMessage({
+          id: 'shared-message',
+          assistantId: 'default',
+          topicId: 'shared-topic',
+          blocks: ['shared-block']
+        })
+      ],
+      messageBlocks: [createBlock('shared-message', 'shared-block')]
+    }
+
+    const firstState = preparePortableSyncState(snapshot, storage)
+    const legacyState = JSON.parse(storage.getItem(PORTABLE_SYNC_STATE_STORAGE_KEY) || '{}')
+    delete legacyState.fingerprintVersion
+    legacyState.fingerprints = {
+      topics: { 'shared-topic': 'legacy-topic-fingerprint' },
+      messages: { 'shared-message': 'legacy-message-fingerprint' },
+      blocks: { 'shared-block': 'legacy-block-fingerprint' },
+      messageSlots: {}
+    }
+    storage.setItem(PORTABLE_SYNC_STATE_STORAGE_KEY, JSON.stringify(legacyState))
+
+    const secondState = preparePortableSyncState(snapshot, storage)
+
+    expect(secondState.entityVersions.topics['shared-topic']).toEqual(firstState.entityVersions.topics['shared-topic'])
+    expect(secondState.entityVersions.messages['shared-message']).toEqual(
+      firstState.entityVersions.messages['shared-message']
+    )
+    expect(secondState.entityVersions.blocks['shared-block']).toEqual(firstState.entityVersions.blocks['shared-block'])
+  })
+
+  it('rebootstraps shared lineage when local versions drift far beyond the incoming frontier', () => {
+    const desktopStorage = createMemoryStorage()
+    desktopStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'desktop-a')
+    const appStorage = createMemoryStorage()
+    appStorage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'mobile-b')
+
+    const sharedEntries = Array.from({ length: 12 }, (_, index) => {
+      const topicId = `shared-topic-${index}`
+      const messageId = `shared-message-${index}`
+      const blockId = `shared-block-${index}`
+
+      return {
+        topic: createTopic({ id: topicId, assistantId: 'default', name: `shared topic ${index}` }),
+        message: createMessage({
+          id: messageId,
+          assistantId: 'default',
+          topicId,
+          role: 'user',
+          content: `shared message ${index}`,
+          blocks: [blockId]
+        }),
+        block: {
+          ...createBlock(messageId, blockId),
+          content: `shared block ${index}`
+        } satisfies MessageBlock
+      }
+    })
+
+    const deletedTopic = createTopic({ id: 'deleted-topic', assistantId: 'default', name: 'delete me' })
+    const deletedMessage = createMessage({
+      id: 'deleted-message',
+      assistantId: 'default',
+      topicId: deletedTopic.id,
+      role: 'user',
+      content: 'delete message',
+      blocks: ['deleted-block']
+    })
+    const deletedBlock = {
+      ...createBlock(deletedMessage.id, 'deleted-block'),
+      content: 'delete block'
+    } satisfies MessageBlock
+
+    const initialDesktopSnapshot = {
+      topics: [...sharedEntries.map((entry) => entry.topic), deletedTopic],
+      messages: [...sharedEntries.map((entry) => entry.message), deletedMessage],
+      messageBlocks: [...sharedEntries.map((entry) => entry.block), deletedBlock]
+    }
+
+    const desktopSeedState = preparePortableSyncState(initialDesktopSnapshot, desktopStorage)
+    bootstrapPortableSyncState(initialDesktopSnapshot, toPortableSyncMetadata(desktopSeedState), appStorage)
+
+    const appSnapshot = {
+      topics: [
+        createTopic({
+          ...sharedEntries[0].topic,
+          name: 'mobile renamed topic',
+          updatedAt: '2026-03-29T00:05:00.000Z'
+        }),
+        ...sharedEntries.slice(1).map((entry) => entry.topic),
+        createTopic({
+          id: 'mobile-new-topic',
+          assistantId: 'default',
+          name: 'brand new on mobile',
+          updatedAt: '2026-03-29T00:06:00.000Z'
+        })
+      ],
+      messages: [
+        createMessage({
+          ...sharedEntries[0].message,
+          content: 'mobile updated content',
+          updatedAt: '2026-03-29T00:05:00.000Z'
+        }),
+        ...sharedEntries.slice(1).map((entry) => entry.message),
+        createMessage({
+          id: 'mobile-new-message',
+          assistantId: 'default',
+          topicId: 'mobile-new-topic',
+          role: 'user',
+          content: 'brand new message',
+          blocks: ['mobile-new-block']
+        })
+      ],
+      messageBlocks: [
+        {
+          ...sharedEntries[0].block,
+          content: 'mobile updated block',
+          updatedAt: '2026-03-29T00:05:00.000Z'
+        } satisfies MessageBlock,
+        ...sharedEntries.slice(1).map((entry) => entry.block),
+        {
+          ...createBlock('mobile-new-message', 'mobile-new-block'),
+          content: 'brand new block'
+        } satisfies MessageBlock
+      ]
+    }
+    const appState = preparePortableSyncState(
+      appSnapshot,
+      appStorage,
+      toPortableSyncMetadata(desktopSeedState).frontier
+    )
+
+    const pollutedState = JSON.parse(desktopStorage.getItem(PORTABLE_SYNC_STATE_STORAGE_KEY) || '{}')
+    let nextLamport = 500
+    pollutedState.lamport = nextLamport
+    pollutedState.frontier['desktop-a'] = nextLamport
+    for (const topic of initialDesktopSnapshot.topics) {
+      pollutedState.entityVersions.topics[topic.id] = { replicaId: 'desktop-a', lamport: nextLamport-- }
+    }
+    for (const message of initialDesktopSnapshot.messages) {
+      pollutedState.entityVersions.messages[message.id] = { replicaId: 'desktop-a', lamport: nextLamport-- }
+    }
+    for (const block of initialDesktopSnapshot.messageBlocks) {
+      pollutedState.entityVersions.blocks[block.id] = { replicaId: 'desktop-a', lamport: nextLamport-- }
+    }
+    desktopStorage.setItem(PORTABLE_SYNC_STATE_STORAGE_KEY, JSON.stringify(pollutedState))
+
+    const driftedLocalState = preparePortableSyncState(
+      initialDesktopSnapshot,
+      desktopStorage,
+      toPortableSyncMetadata(appState).frontier
+    )
+    const diagnosis = diagnosePortableSyncVersionDrift({
+      currentTopics: initialDesktopSnapshot.topics,
+      incomingTopics: appSnapshot.topics,
+      currentMessages: initialDesktopSnapshot.messages,
+      incomingMessages: appSnapshot.messages,
+      currentMessageBlocks: initialDesktopSnapshot.messageBlocks,
+      incomingMessageBlocks: appSnapshot.messageBlocks,
+      localState: driftedLocalState,
+      incomingSync: toPortableSyncMetadata(appState)
+    })
+
+    expect(diagnosis.suspected).toBe(true)
+    expect(diagnosis.inflatedEntityCount).toBeGreaterThanOrEqual(32)
+
+    const repairedLocalState = bootstrapPortableSyncState(
+      initialDesktopSnapshot,
+      toPortableSyncMetadata(appState),
+      desktopStorage
+    )
+    const result = resolvePortableSyncSnapshot({
+      currentTopics: initialDesktopSnapshot.topics,
+      incomingTopics: appSnapshot.topics,
+      currentMessages: initialDesktopSnapshot.messages,
+      incomingMessages: appSnapshot.messages,
+      currentMessageBlocks: initialDesktopSnapshot.messageBlocks,
+      incomingMessageBlocks: appSnapshot.messageBlocks,
+      localState: repairedLocalState,
+      incomingSync: toPortableSyncMetadata(appState),
+      preferIncomingOnEqualVersion: true
+    })
+
+    expect(result.topics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'shared-topic-0', name: 'mobile renamed topic' }),
+        expect.objectContaining({ id: 'mobile-new-topic', name: 'brand new on mobile' })
+      ])
+    )
+    expect(result.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'shared-message-0', content: 'mobile updated content' }),
+        expect.objectContaining({ id: 'mobile-new-message', content: 'brand new message' })
+      ])
+    )
+    expect(result.messageBlocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'shared-block-0', content: 'mobile updated block' }),
+        expect.objectContaining({ id: 'mobile-new-block', content: 'brand new block' })
+      ])
+    )
+    expect(result.deletedTopicIds).toContain('deleted-topic')
+    expect(result.deletedMessageIds).toContain('deleted-message')
+    expect(result.deletedBlockIds).toContain('deleted-block')
+  })
+
   it('ignores platform-specific fields when computing portable sync fingerprints', () => {
     const storage = createMemoryStorage()
     storage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'desktop-a')
@@ -883,7 +1110,7 @@ describe('portableSyncState', () => {
       providerMetadata: { provider: { trace: 'desktop-only' } },
       traceId: 'trace-desktop-only',
       agentSessionId: 'agent-desktop-only'
-    } as Message)
+    })
     const portableMessage = createMessage({
       id: 'shared-message',
       assistantId: 'default',

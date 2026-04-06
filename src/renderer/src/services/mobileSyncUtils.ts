@@ -412,6 +412,8 @@ export function buildDesktopSyncAssistantState({
     ...incomingAssistants.map((assistant) => assistant.id),
     ...Array.from(topicsByAssistantId.keys())
   ])
+  allAssistantIds.delete(currentDefaultAssistant.id)
+  allAssistantIds.delete(incomingDefaultAssistant.id)
 
   const defaultAssistant = {
     ...currentDefaultAssistant,

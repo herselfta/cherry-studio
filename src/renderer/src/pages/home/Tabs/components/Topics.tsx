@@ -33,7 +33,7 @@ import {
   exportTopicToNotion,
   topicToMarkdown
 } from '@renderer/utils/export'
-import { DEFAULT_TOPIC_SORT_MODE, sortTopics,type TopicSortMode } from '@renderer/utils/topicSort'
+import { DEFAULT_TOPIC_SORT_MODE, sortTopics, type TopicSortMode } from '@renderer/utils/topicSort'
 import type { MenuProps } from 'antd'
 import { Dropdown, Tooltip } from 'antd'
 import type { ItemType, MenuItemType } from 'antd/es/menu/interface'

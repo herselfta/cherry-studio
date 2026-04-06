@@ -13,7 +13,8 @@ import {
   type MobileOnlineSyncSkippedChange,
   type MobileOnlineSyncSnapshot,
   type MobileOnlineSyncTrackerState,
-  prepareMobileOnlineSyncState} from '@shared/mobileSync/onlineSync'
+  prepareMobileOnlineSyncState
+} from '@shared/mobileSync/onlineSync'
 import { app } from 'electron'
 
 import { windowService } from './WindowService'

@@ -1093,13 +1093,13 @@ export async function buildPortableImageAssets(
 export async function getBackupData() {
   const indexedDB = await backupDatabase()
   const portableImageAssets = await buildPortableImageAssets(indexedDB)
-  const currentTopics = (indexedDB.topics || []) as Array<{ id: string; messages?: Message[] }>
+  const currentTopics = (indexedDB['topics'] || []) as Array<{ id: string; messages?: Message[] }>
   const currentMessages = currentTopics.flatMap((topic) => topic.messages || [])
   const currentMessageIds = new Set(currentMessages.map((message) => message.id))
   const portableSyncState = preparePortableSyncState({
     topics: collectTopicsFromBackupStore(),
     messages: currentMessages,
-    messageBlocks: ((indexedDB.message_blocks || []) as MessageBlock[]).filter((block) =>
+    messageBlocks: ((indexedDB['message_blocks'] || []) as MessageBlock[]).filter((block) =>
       currentMessageIds.has(block.messageId)
     )
   })
@@ -1120,10 +1120,9 @@ export async function getBackupData() {
 function collectTopicsFromBackupStore() {
   const currentState = store.getState()
 
-  return [
-    currentState.assistants.defaultAssistant,
-    ...currentState.assistants.assistants
-  ].flatMap((assistant) => assistant.topics || []) as Topic[]
+  return [currentState.assistants.defaultAssistant, ...currentState.assistants.assistants].flatMap(
+    (assistant) => assistant.topics || []
+  ) as Topic[]
 }
 
 /************************************* Backup Utils ************************************** */
@@ -1181,7 +1180,7 @@ export async function handleData(data: Record<string, any>) {
 
 async function backupDatabase() {
   const tables = db.tables
-  const backup = {}
+  const backup: Record<string, unknown[]> = {}
 
   for (const table of tables) {
     backup[table.name] = await table.toArray()

@@ -154,6 +154,7 @@ describe('mobileSyncUtils', () => {
       result.assistants.find((assistant) => assistant.id === 'external-1')?.topics.map((topic) => topic.id)
     ).toEqual(expect.arrayContaining(['mobile-external-topic-2']))
     expect(result.assistants.find((assistant) => assistant.id === 'quick')).toBeUndefined()
+    expect(result.assistants.find((assistant) => assistant.id === 'default')).toBeUndefined()
   })
 
   it('synthesizes missing topics from message ownership so mobile imports do not silently lose them', () => {
@@ -319,12 +320,7 @@ describe('mobileSyncUtils', () => {
         avatar: 'data:image/png;base64,mobile-default-avatar'
       })
     )
-    expect(result.assistants.find((assistant) => assistant.id === 'default')).toEqual(
-      expect.objectContaining({
-        name: 'Mobile Default',
-        avatar: 'data:image/png;base64,mobile-default-avatar'
-      })
-    )
+    expect(result.assistants.find((assistant) => assistant.id === 'default')).toBeUndefined()
   })
 
   it('preserves per-assistant runtime model fields from the imported mobile payload', () => {

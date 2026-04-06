@@ -6,7 +6,12 @@ import { WebdavBackupManager } from '@renderer/components/WebdavBackupManager'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { buildBackupArtifactFileName } from '@renderer/services/BackupArtifactService'
-import { backupToWebdavWithConfig, restoreFromWebdavWithConfig, startAutoBackup, stopAutoBackup } from '@renderer/services/BackupService'
+import {
+  backupToWebdavWithConfig,
+  restoreFromWebdavWithConfig,
+  startAutoBackup,
+  stopAutoBackup
+} from '@renderer/services/BackupService'
 import {
   importMobileSyncFromWebdav,
   isMobileSyncRemoteFile,
