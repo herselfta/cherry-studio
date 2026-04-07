@@ -9,7 +9,6 @@ import {
 } from '@renderer/types/newMessage'
 import { describe, expect, it, vi } from 'vitest'
 
-import { normalizeDesktopSyncExportTopics } from '../mobileSyncUtils'
 import {
   bootstrapPortableSyncState,
   diagnosePortableSyncVersionDrift,
@@ -18,6 +17,7 @@ import {
   resolvePortableSyncSnapshot,
   toPortableSyncMetadata
 } from '../portableSyncState'
+import { normalizeDesktopSyncExportTopics } from '../mobileSyncUtils'
 
 vi.mock('../mobileSyncLedger', () => ({
   MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY: 'mobile_sync_source_device_id',

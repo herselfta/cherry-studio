@@ -11,7 +11,9 @@ interface Props {
 }
 
 const MessageContent: React.FC<Props> = ({ message }) => {
-  const validMentions = message.mentions?.filter((mention) => mention.id !== (message.modelId || message.model?.id))
+  const validMentions = message.mentions?.filter(
+    (mention) => mention.id !== (message.modelId || message.model?.id)
+  )
 
   return (
     <>

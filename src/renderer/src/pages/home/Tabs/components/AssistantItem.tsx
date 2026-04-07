@@ -176,7 +176,7 @@ const AssistantItem: FC<AssistantItemProps> = ({
           {assistant.topics && (
             <div
               className={cn(
-                'ml-1 shrink-0 text-(--color-text-lighter) text-[11px] transition-all',
+                'text-[11px] text-(--color-text-lighter) shrink-0 ml-1 transition-all',
                 isActive || isHovered ? 'mr-7' : ''
               )}>
               {assistant.topics.length}

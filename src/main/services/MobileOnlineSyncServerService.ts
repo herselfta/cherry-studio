@@ -158,7 +158,6 @@ export class MobileOnlineSyncServerService {
   }
 
   async refreshDesktopSnapshot() {
-    logger.debug('Starting refreshDesktopSnapshot')
     const currentState = await this.readState()
     const desktopSnapshot = await this.evaluateRendererBridge<MobileOnlineSyncSnapshot>('collectSnapshot')
     const prepared = prepareMobileOnlineSyncState(desktopSnapshot, currentState.tracker)
@@ -192,7 +191,6 @@ export class MobileOnlineSyncServerService {
   }
 
   async pullChanges(cursor: number) {
-    logger.debug('Starting pullChanges', { cursor })
     const { state } = await this.refreshDesktopSnapshot()
     const changes = state.changeLog.filter((entry) => entry.cursor > cursor).map((entry) => entry.change)
 
@@ -209,7 +207,6 @@ export class MobileOnlineSyncServerService {
   }
 
   async pushChanges(changes: MobileOnlineSyncChange[]) {
-    logger.debug('Starting pushChanges', { incomingChangeTotal: changes.length })
     const { state: refreshedState } = await this.refreshDesktopSnapshot()
     const applyResult = applyMobileOnlineSyncChanges(refreshedState.snapshot, refreshedState.tracker, changes)
     const appended = this.appendChanges(refreshedState, applyResult.acceptedChanges)
