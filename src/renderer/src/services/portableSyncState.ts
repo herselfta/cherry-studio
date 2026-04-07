@@ -843,15 +843,16 @@ export function diagnosePortableSyncVersionDrift({
     topicCounters.tombstonedInflatedCount +
     messageCounters.tombstonedInflatedCount +
     blockCounters.tombstonedInflatedCount
+  const corroboratedInflatedEntityCount = identicalInflatedEntityCount + tombstonedInflatedEntityCount
   const lamportGap = Math.max(0, localState.lamport - knownIncomingLamport)
 
   const suspected = Boolean(
     knownIncomingLamport > 0 &&
-      lamportGap >= 64 &&
-      inflatedEntityCount >= 32 &&
-      trackedSharedEntityCount > 0 &&
-      inflatedEntityCount * 4 >= trackedSharedEntityCount &&
-      (identicalInflatedEntityCount + tombstonedInflatedEntityCount) * 2 >= inflatedEntityCount
+      lamportGap >= 6 &&
+      trackedSharedEntityCount >= 3 &&
+      inflatedEntityCount >= 3 &&
+      inflatedEntityCount * 2 >= trackedSharedEntityCount &&
+      corroboratedInflatedEntityCount * 3 >= inflatedEntityCount * 2
   )
 
   return {
