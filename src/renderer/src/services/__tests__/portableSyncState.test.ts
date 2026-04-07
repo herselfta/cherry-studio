@@ -17,6 +17,7 @@ import {
   resolvePortableSyncSnapshot,
   toPortableSyncMetadata
 } from '../portableSyncState'
+import { normalizeDesktopSyncExportTopics } from '../mobileSyncUtils'
 
 vi.mock('../mobileSyncLedger', () => ({
   MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY: 'mobile_sync_source_device_id',
@@ -1253,6 +1254,68 @@ describe('portableSyncState', () => {
     expect(result.deletedTopicIds).toContain('deleted-topic-small')
     expect(result.deletedMessageIds).toContain('deleted-message-small')
     expect(result.deletedBlockIds).toContain('deleted-block-small')
+  })
+
+  it('treats an emptied topic as deleted once the portable export subset no longer includes it', () => {
+    const storage = createMemoryStorage()
+    storage.setItem(MOBILE_SYNC_SOURCE_DEVICE_ID_STORAGE_KEY, 'desktop-a')
+
+    const assistant = {
+      id: 'default',
+      name: 'Default',
+      prompt: '',
+      type: 'assistant',
+      topics: []
+    }
+    const topic = createTopic({ id: 'shared-topic', assistantId: 'default' })
+    const message = createMessage({
+      id: 'shared-message',
+      assistantId: 'default',
+      topicId: topic.id,
+      role: 'user',
+      content: 'hello',
+      blocks: ['shared-block']
+    })
+    const block = {
+      ...createBlock(message.id, 'shared-block'),
+      content: 'hello'
+    } satisfies MessageBlock
+
+    const firstExportTopics = normalizeDesktopSyncExportTopics({
+      assistants: [assistant],
+      topics: [topic],
+      messages: [message]
+    })
+    const firstState = preparePortableSyncState(
+      {
+        topics: firstExportTopics,
+        messages: [message],
+        messageBlocks: [block]
+      },
+      storage
+    )
+
+    const secondExportTopics = normalizeDesktopSyncExportTopics({
+      assistants: [assistant],
+      topics: [topic],
+      messages: []
+    })
+    expect(secondExportTopics).toEqual([])
+
+    const secondState = preparePortableSyncState(
+      {
+        topics: secondExportTopics,
+        messages: [],
+        messageBlocks: []
+      },
+      storage
+    )
+
+    expect(firstState.entityVersions.topics['shared-topic']).toBeDefined()
+    expect(secondState.entityVersions.topics['shared-topic']).toBeUndefined()
+    expect(secondState.tombstones.topics['shared-topic']).toBeDefined()
+    expect(secondState.tombstones.messages['shared-message']).toBeDefined()
+    expect(secondState.tombstones.blocks['shared-block']).toBeDefined()
   })
 
   it('ignores platform-specific fields when computing portable sync fingerprints', () => {

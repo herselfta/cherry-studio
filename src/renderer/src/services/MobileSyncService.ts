@@ -333,6 +333,30 @@ function summarizeDesktopConversationSnapshot(topics: Topic[], messages: Message
   }
 }
 
+function buildPortableSyncExportSnapshot(params: {
+  assistants: Assistant[]
+  topics: Topic[]
+  messages: Message[]
+  messageBlocks: MessageBlock[]
+}) {
+  const normalizedTopics = normalizeDesktopSyncExportTopics({
+    assistants: params.assistants,
+    topics: params.topics,
+    messages: params.messages
+  })
+  const normalizedTopicIds = new Set(normalizedTopics.map((topic) => topic.id))
+  const normalizedMessages = normalizePortableConversationMessages(
+    params.messages.filter((message) => normalizedTopicIds.has(message.topicId))
+  )
+  const normalizedMessageIds = new Set(normalizedMessages.map((message) => message.id))
+
+  return {
+    topics: normalizedTopics,
+    messages: normalizedMessages,
+    messageBlocks: params.messageBlocks.filter((block) => normalizedMessageIds.has(block.messageId))
+  }
+}
+
 function summarizePersistedReduxSlices(params: {
   assistants: ReturnType<typeof store.getState>['assistants']
   llm: ReturnType<typeof store.getState>['llm']
@@ -496,27 +520,16 @@ export async function exportMobileSyncPayload(): Promise<string> {
   }
 
   const currentTopicMetadata = collectTopicMetadata(currentState)
-  const currentMessageIds = new Set(rawMessages.map((message) => message.id))
-  const portableSyncState = preparePortableSyncState({
-    topics: currentTopicMetadata,
-    messages: rawMessages,
-    messageBlocks: messageBlocks.filter((block) => currentMessageIds.has(block.messageId))
-  })
-  const activeTopicIds = new Set(Object.keys(portableSyncState.entityVersions.topics))
-
-  const normalizedTopics = normalizeDesktopSyncExportTopics({
+  const portableSnapshot = buildPortableSyncExportSnapshot({
     assistants: [currentState.assistants.defaultAssistant, ...currentState.assistants.assistants],
     topics: currentTopicMetadata,
-    messages: rawMessages
-  }).filter((topic) => activeTopicIds.has(topic.id))
-  const normalizedTopicIds = new Set(normalizedTopics.map((topic) => topic.id))
-  const syncTopics = normalizedTopics.map(toSyncTopic)
-
-  const normalizedMessages = normalizePortableConversationMessages(
-    rawMessages.filter((message) => normalizedTopicIds.has(message.topicId))
-  )
-  const normalizedMessageIds = new Set(normalizedMessages.map((message) => message.id))
-  const normalizedMessageBlocks = messageBlocks.filter((block) => normalizedMessageIds.has(block.messageId))
+    messages: rawMessages,
+    messageBlocks
+  })
+  const portableSyncState = preparePortableSyncState(portableSnapshot)
+  const syncTopics = portableSnapshot.topics.map(toSyncTopic)
+  const normalizedMessages = portableSnapshot.messages
+  const normalizedMessageBlocks = portableSnapshot.messageBlocks
 
   const portableImageAssets = (await buildPortableImageAssets({
     message_blocks: normalizedMessageBlocks,
