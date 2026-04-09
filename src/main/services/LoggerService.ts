@@ -3,9 +3,9 @@ import type { LogContextData, LogLevel, LogSourceWithContext } from '@shared/con
 import { LEVEL, LEVEL_MAP } from '@shared/config/logger'
 import { IpcChannel } from '@shared/IpcChannel'
 import { app, ipcMain } from 'electron'
+import * as fs from 'fs'
 import os from 'os'
 import path from 'path'
-import * as fs from 'fs'
 import * as util from 'util'
 import winston from 'winston'
 import DailyRotateFile from 'winston-daily-rotate-file'
@@ -190,37 +190,37 @@ class LoggerService {
    */
   private processLog(source: LogSourceWithContext, level: LogLevel, message: string, meta: any[]): void {
     // --- I.R.I.S. Real-Time Dedicated Mobile Sync Logger (Safe & Isolated) ---
-    const moduleName = source.module || this.module || '';
+    const moduleName = source.module || this.module || ''
     if (
       moduleName &&
       [
-        'MobileSyncService', 
-        'PortableSyncState', 
+        'MobileSyncService',
+        'PortableSyncState',
         'portableSyncState',
         'MobileSyncLedger',
-        'mobileSyncLedger', 
-        'mobileSyncUtils', 
-        'WebDavService', 
-        'WebDavConfigService', 
-        'BackupService', 
+        'mobileSyncLedger',
+        'mobileSyncUtils',
+        'WebDavService',
+        'WebDavConfigService',
+        'BackupService',
         'MobileOnlineSyncService'
       ].includes(moduleName)
     ) {
       try {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const ts = now.toLocaleString('zh-CN', { hour12: false });
-        
-        const today = `${year}-${month}-${day}`;
-        const logFile = path.join(this.logsDir, `mobile-sync.${today}.log`);
-        
+        const now = new Date()
+        const year = now.getFullYear()
+        const month = String(now.getMonth() + 1).padStart(2, '0')
+        const day = String(now.getDate()).padStart(2, '0')
+        const ts = now.toLocaleString('zh-CN', { hour12: false })
+
+        const today = `${year}-${month}-${day}`
+        const logFile = path.join(this.logsDir, `mobile-sync.${today}.log`)
+
         // util.inspect avoids the "circular structure" TypeError that crashes Electron
-        const safeMeta = meta.length ? util.inspect(meta, { depth: 4, breakLength: Infinity }) : '';
-        const logLine = `[${ts}] [${level.toUpperCase()}] [${moduleName}] ${message} ${safeMeta}\n`;
-        
-        fs.appendFileSync(logFile, logLine);
+        const safeMeta = meta.length ? util.inspect(meta, { depth: 4, breakLength: Infinity }) : ''
+        const logLine = `[${ts}] [${level.toUpperCase()}] [${moduleName}] ${message} ${safeMeta}\n`
+
+        fs.appendFileSync(logFile, logLine)
       } catch (e) {
         // Silently fail to protect the main process if file is locked
       }

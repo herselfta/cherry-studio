@@ -23,7 +23,7 @@ import {
   restoreBackupLocalStorageSnapshot
 } from './BackupLocalStorage'
 import { NotificationService } from './NotificationService'
-import { preparePortableSyncState, toPortableSyncMetadata } from './portableSyncState'
+import { preparePortableSyncState, seedPortableSyncState, toPortableSyncMetadata } from './portableSyncState'
 
 const logger = loggerService.withContext('BackupService')
 
@@ -1120,8 +1120,8 @@ export async function getBackupData() {
 function collectTopicsFromBackupStore() {
   const currentState = store.getState()
 
-  return [currentState.assistants.defaultAssistant, ...currentState.assistants.assistants].flatMap(
-    (assistant) => assistant.topics || []
+  return [currentState.assistants.defaultAssistant, ...currentState.assistants.assistants].flatMap((assistant) =>
+    (assistant.topics || []).map((topic: any) => ({ ...topic, assistantId: topic.assistantId || assistant.id }))
   ) as Topic[]
 }
 
@@ -1158,6 +1158,39 @@ export async function handleData(data: Record<string, any>) {
     }
 
     await restoreDatabase(data.indexedDB)
+
+    if (data.portableSync) {
+      let currentTopics = [] as any[]
+      const persistedStateRaw = data.localStorage['persist:cherry-studio']
+      if (typeof persistedStateRaw === 'string') {
+        try {
+          const persistedState = JSON.parse(persistedStateRaw)
+          if (typeof persistedState['assistants'] === 'string') {
+            const assistants = JSON.parse(persistedState['assistants'])
+            currentTopics = [assistants.defaultAssistant, ...(assistants.assistants || [])].flatMap((a: any) =>
+              (a.topics || []).map((t: any) => ({ ...t, assistantId: t.assistantId || a.id }))
+            )
+          }
+        } catch (e) {
+          logger.error('Failed to parse persisted state for portable sync seeding', e as Error)
+        }
+      }
+
+      const dbTopics = (data.indexedDB['topics'] || []) as Array<any>
+      const currentMessages = dbTopics.flatMap((topic) => topic.messages || [])
+      const currentMessageIds = new Set(currentMessages.map((message) => message.id))
+      const syncedMessageBlocks = ((data.indexedDB['message_blocks'] || []) as Array<any>).filter((block) =>
+        currentMessageIds.has(block.messageId)
+      )
+      seedPortableSyncState(
+        {
+          topics: currentTopics,
+          messages: currentMessages,
+          messageBlocks: syncedMessageBlocks
+        },
+        data.portableSync
+      )
+    }
 
     if (data.version === 3) {
       await db.transaction('rw', db.tables, async (tx) => {

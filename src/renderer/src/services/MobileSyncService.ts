@@ -413,8 +413,13 @@ function collectTopicMetadata(currentState: ReturnType<typeof store.getState>) {
 
 function collectTopicMetadataFromAssistantState(assistantsState: ReturnType<typeof store.getState>['assistants']) {
   return [
-    ...assistantsState.assistants.flatMap((assistant) => assistant.topics),
-    ...assistantsState.defaultAssistant.topics
+    ...assistantsState.assistants.flatMap((assistant) =>
+      assistant.topics.map((topic) => ({ ...topic, assistantId: topic.assistantId || assistant.id }))
+    ),
+    ...assistantsState.defaultAssistant.topics.map((topic) => ({
+      ...topic,
+      assistantId: topic.assistantId || assistantsState.defaultAssistant.id
+    }))
   ]
 }
 

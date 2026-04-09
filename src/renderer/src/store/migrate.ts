@@ -295,7 +295,7 @@ const migrateConfig = {
 
         assistant.topics = assistant.topics.map((topic) => {
           if (isEmpty(topic.name)) {
-            topic.name = i18n.t('chat.default.topic.name')
+            topic.name = 'New Topic'
           }
           return topic
         })
@@ -504,10 +504,10 @@ const migrateConfig = {
           ...state.assistants,
           assistants: state.assistants.assistants.map((assistant) => ({
             ...assistant,
-            topics: assistant.topics.map((topic) => ({
+            topics: assistant.topics.map((topic: any) => ({
               ...topic,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
+              createdAt: topic.createdAt || '2024-01-01T00:00:00.000Z',
+              updatedAt: topic.updatedAt || '2024-01-01T00:00:00.000Z'
             }))
           }))
         },

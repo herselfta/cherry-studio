@@ -568,6 +568,16 @@ function migratePortableSyncFingerprints(state: PortableSyncState, snapshot: Por
   }
 }
 
+export function seedPortableSyncState(
+  snapshot: PortableSyncSnapshot,
+  incomingSync: PortableSyncMetadata,
+  storage: Storage = localStorage
+) {
+  const state = createPortableSyncStateFromMetadata(snapshot, incomingSync, storage)
+  writePortableSyncState(state, storage)
+  return state
+}
+
 export function bootstrapPortableSyncState(
   snapshot: PortableSyncSnapshot,
   incomingSync: PortableSyncMetadata,
@@ -1064,6 +1074,14 @@ export function resolvePortableSyncSnapshot({
     mergedTombstones.messages,
     finalTopicIds
   )
+
+  const topicIdsWithMessages = new Set(Array.from(mergedMessages.values()).map((message) => message.topicId))
+  const prunedEmptyTopicIds = Array.from(finalTopicIds).filter((topicId) => !topicIdsWithMessages.has(topicId))
+  for (const topicId of prunedEmptyTopicIds) {
+    topicMap.delete(topicId)
+    finalTopicIds.delete(topicId)
+    delete topicVersions[topicId]
+  }
 
   const mergedSlots = mergeMessageSlots(localState.messageSlots, incomingSync.messageSlots)
   const suppressedMessageIds = new Set<string>()
