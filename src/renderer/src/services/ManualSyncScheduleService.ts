@@ -265,21 +265,21 @@ function isProviderConfigured(provider: ManualSyncProvider) {
 
 async function runScheduledUpload(provider: ManualSyncProvider) {
   if (provider === 'webdav') {
-    await backupToWebdav()
+    await backupToWebdav({ autoBackupProcess: true })
     return
   }
 
   if (provider === 'local') {
-    await backupToLocal()
+    await backupToLocal({ autoBackupProcess: true })
     return
   }
 
   if (provider === 'nutstore') {
-    await backupToNutstore()
+    await backupToNutstore({ autoBackupProcess: true })
     return
   }
 
-  await backupToS3()
+  await backupToS3({ autoBackupProcess: true })
 }
 
 async function runScheduledRestore(provider: ManualSyncProvider) {

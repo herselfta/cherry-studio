@@ -1,6 +1,8 @@
 import { DeleteOutlined, ExclamationCircleOutlined, ReloadOutlined } from '@ant-design/icons'
 import { LEGACY_INTERNAL_BACKUP_FILE_NAME, restoreFromLocal } from '@renderer/services/BackupService'
 import { formatFileSize } from '@renderer/utils'
+import { createAlwaysVisiblePaginationConfig } from '@renderer/utils/pagination'
+import type { PaginationProps } from 'antd'
 import { Button, message, Modal, Segmented, Space, Table, Tooltip } from 'antd'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useState } from 'react'
@@ -41,11 +43,13 @@ export function LocalBackupManager({
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [deleting, setDeleting] = useState(false)
   const [restoring, setRestoring] = useState(false)
-  const [pagination, setPagination] = useState({
-    current: 1,
-    pageSize: 5,
-    total: 0
-  })
+  const [pagination, setPagination] = useState<PaginationProps>(
+    createAlwaysVisiblePaginationConfig({
+      current: 1,
+      pageSize: 5,
+      total: 0
+    })
+  )
   const fetchBackupFiles = useCallback(async () => {
     if (!localBackupDir) {
       return

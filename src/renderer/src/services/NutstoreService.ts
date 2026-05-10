@@ -7,7 +7,12 @@ import { NUTSTORE_HOST } from '@shared/config/nutstore'
 import { type CreateDirectoryOptions } from 'webdav'
 
 import { buildBackupArtifactFileName } from './BackupArtifactService'
-import { getBackupData, handleData, isRemotePortablePcBackupFile } from './BackupService'
+import {
+  getAppMigrationBackupFilesToDelete,
+  getBackupData,
+  getRemotePortableBackupFilesToDelete,
+  handleData
+} from './BackupService'
 import { importMobileSyncFromWebdav, uploadMobileSyncToWebdav } from './MobileSyncService'
 
 const logger = loggerService.withContext('NutstoreService')
@@ -77,30 +82,24 @@ async function cleanupOldBackups(webdavConfig: WebDavConfig, maxBackups: number)
       return
     }
 
-    const backupFiles = files
-      .filter((file) => isRemotePortablePcBackupFile(file.fileName))
-      .sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
-
-    if (backupFiles.length < maxBackups) {
-      logger.info(`[cleanupOldBackups] No cleanup needed: ${backupFiles.length}/${maxBackups} backups`)
-      return
-    }
-
-    const filesToDelete = backupFiles.slice(maxBackups - 1)
-    logger.info(`[cleanupOldBackups] Deleting ${filesToDelete.length} old backup files`)
-
-    let deletedCount = 0
-    for (const file of filesToDelete) {
+    // PC Cleanup
+    const pcFilesToDelete = getRemotePortableBackupFilesToDelete(files, maxBackups, { deviceType: '', hostname: '' })
+    for (const file of pcFilesToDelete) {
       try {
         await window.api.backup.deleteWebdavFile(file.fileName, webdavConfig)
-        deletedCount++
       } catch (error) {
-        logger.error(`[cleanupOldBackups] Failed to delete ${file.fileName}:`, error as Error)
+        logger.error(`[cleanupOldBackups] Failed to delete PC backup ${file.fileName}:`, error as Error)
       }
     }
 
-    if (deletedCount > 0) {
-      logger.info(`[cleanupOldBackups] Successfully deleted ${deletedCount} old backups`)
+    // App Cleanup (Separate)
+    const appFilesToDelete = getAppMigrationBackupFilesToDelete(files, maxBackups, { deviceType: '', hostname: '' })
+    for (const file of appFilesToDelete) {
+      try {
+        await window.api.backup.deleteWebdavFile(file.fileName, webdavConfig)
+      } catch (error) {
+        logger.error(`[cleanupOldBackups] Failed to delete App backup ${file.fileName}:`, error as Error)
+      }
     }
   } catch (error) {
     logger.error('[cleanupOldBackups] Error during cleanup:', error as Error)

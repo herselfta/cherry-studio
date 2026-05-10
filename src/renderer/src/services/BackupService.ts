@@ -12,6 +12,8 @@ import dayjs from 'dayjs'
 
 import {
   buildBackupArtifactFileName,
+  isDirectPcSnapshotArtifactFile,
+  isMobileSyncArtifactFile,
   isRemotePortablePcArtifactFile,
   isStrictPcMigrationArtifactFile,
   LEGACY_PORTABLE_BACKUP_FILE_NAME,
@@ -305,20 +307,10 @@ export async function backupToWebdav({
             webdavPath
           })
 
-          // 筛选当前设备的备份文件
-          const currentDeviceFiles = files.filter(
-            (file) =>
-              file.fileName.includes(deviceType) &&
-              file.fileName.includes(hostname) &&
-              isRemotePortablePcBackupFile(file.fileName)
-          )
+          const filesToDelete = getRemotePortableBackupFilesToDelete(files, webdavMaxBackups, { deviceType, hostname })
 
-          // 如果当前设备的备份文件数量超过最大保留数量，删除最旧的文件
-          if (currentDeviceFiles.length > webdavMaxBackups) {
-            // 文件已按修改时间降序排序，所以最旧的文件在末尾
-            const filesToDelete = currentDeviceFiles.slice(webdavMaxBackups)
-
-            logger.verbose(`Cleaning up ${filesToDelete.length} old backup files`)
+          if (filesToDelete.length > 0) {
+            logger.verbose(`Cleaning up ${filesToDelete.length} old PC backup files`)
 
             // 串行删除文件，避免并发请求导致的问题
             for (let i = 0; i < filesToDelete.length; i++) {
@@ -332,6 +324,27 @@ export async function backupToWebdav({
 
               // 在删除操作之间添加短暂延迟，避免请求过于频繁
               if (i < filesToDelete.length - 1) {
+                await new Promise((resolve) => setTimeout(resolve, 500))
+              }
+            }
+          }
+
+          // Separate cleanup for App (mobile sync) backups
+          const appFilesToDelete = getAppMigrationBackupFilesToDelete(files, webdavMaxBackups, {
+            deviceType,
+            hostname
+          })
+          if (appFilesToDelete.length > 0) {
+            logger.verbose(`Cleaning up ${appFilesToDelete.length} old App backup files`)
+            for (let i = 0; i < appFilesToDelete.length; i++) {
+              const file = appFilesToDelete[i]
+              await deleteWebdavFileWithRetry(file.fileName, {
+                webdavHost,
+                webdavUser,
+                webdavPass,
+                webdavPath
+              })
+              if (i < appFilesToDelete.length - 1) {
                 await new Promise((resolve) => setTimeout(resolve, 500))
               }
             }
@@ -445,20 +458,27 @@ export async function backupToWebdavWithConfig(
       if (webdavMaxBackups > 0) {
         try {
           const files = await window.api.backup.listWebdavFiles(webdavConfig)
-          const currentDeviceFiles = files
-            .filter((file) => isRemotePortablePcBackupFile(file.fileName))
-            .sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
 
-          if (currentDeviceFiles.length > webdavMaxBackups) {
-            const filesToDelete = currentDeviceFiles.slice(webdavMaxBackups)
+          // PC Cleanup
+          const pcFilesToDelete = getRemotePortableBackupFilesToDelete(files, webdavMaxBackups, {
+            deviceType: '',
+            hostname: ''
+          })
+          for (const file of pcFilesToDelete) {
+            await deleteWebdavFileWithRetry(file.fileName, webdavConfig).catch((error) => {
+              logger.error(`[WebDAV] Failed to delete old PC backup file ${file.fileName}:`, error)
+            })
+          }
 
-            await Promise.all(
-              filesToDelete.map((file) =>
-                deleteWebdavFileWithRetry(file.fileName, webdavConfig).catch((error) => {
-                  logger.error(`[WebDAV] Failed to delete old backup file ${file.fileName}:`, error)
-                })
-              )
-            )
+          // App Cleanup (Separate)
+          const appFilesToDelete = getAppMigrationBackupFilesToDelete(files, webdavMaxBackups, {
+            deviceType: '',
+            hostname: ''
+          })
+          for (const file of appFilesToDelete) {
+            await deleteWebdavFileWithRetry(file.fileName, webdavConfig).catch((error) => {
+              logger.error(`[WebDAV] Failed to delete old App backup file ${file.fileName}:`, error)
+            })
           }
         } catch (error) {
           logger.error('[WebDAV] Failed to cleanup old backup files:', error as Error)
@@ -625,26 +645,35 @@ export async function backupToS3({
           // 获取所有备份文件
           const files = await window.api.backup.listS3Files(s3Config)
 
-          // 筛选当前设备的备份文件
-          const currentDeviceFiles = files.filter((file) => {
-            return (
-              file.fileName.includes(deviceType) &&
-              file.fileName.includes(hostname) &&
-              isRemotePortablePcBackupFile(file.fileName)
-            )
+          const filesToDelete = getRemotePortableBackupFilesToDelete(files, s3Config.maxBackups, {
+            deviceType,
+            hostname
           })
 
-          // 如果当前设备的备份文件数量超过最大保留数量，删除最旧的文件
-          if (currentDeviceFiles.length > s3Config.maxBackups) {
-            const filesToDelete = currentDeviceFiles.slice(s3Config.maxBackups)
-
-            logger.verbose(`Cleaning up ${filesToDelete.length} old backup files`)
+          if (filesToDelete.length > 0) {
+            logger.verbose(`Cleaning up ${filesToDelete.length} old PC backup files`)
 
             for (let i = 0; i < filesToDelete.length; i++) {
               const file = filesToDelete[i]
               await deleteS3FileWithRetry(file.fileName, s3Config)
 
               if (i < filesToDelete.length - 1) {
+                await new Promise((resolve) => setTimeout(resolve, 500))
+              }
+            }
+          }
+
+          // Separate cleanup for App (mobile sync) backups
+          const appFilesToDelete = getAppMigrationBackupFilesToDelete(files, s3Config.maxBackups, {
+            deviceType,
+            hostname
+          })
+          if (appFilesToDelete.length > 0) {
+            logger.verbose(`Cleaning up ${appFilesToDelete.length} old App backup files`)
+            for (let i = 0; i < appFilesToDelete.length; i++) {
+              const file = appFilesToDelete[i]
+              await deleteS3FileWithRetry(file.fileName, s3Config)
+              if (i < appFilesToDelete.length - 1) {
                 await new Promise((resolve) => setTimeout(resolve, 500))
               }
             }
@@ -1322,22 +1351,22 @@ export async function backupToLocal({
           // Get all backup files
           const files = await window.api.backup.listLocalBackupFiles(localBackupDir)
 
-          // Filter backups for current device
-          const currentDeviceFiles = files.filter((file) => {
-            return file.fileName.includes(deviceType) && file.fileName.includes(hostname)
+          const filesToDelete = getLocalBackupFilesToDelete(files, localBackupMaxBackups, { deviceType, hostname })
+
+          // Delete older backups
+          for (const file of filesToDelete) {
+            logger.verbose(`[LocalBackup] Deleting old backup: ${file.fileName}`)
+            await window.api.backup.deleteLocalBackupFile(file.fileName, localBackupDir)
+          }
+
+          // Separate cleanup for App (mobile sync) backups
+          const appFilesToDelete = getAppMigrationBackupFilesToDelete(files, localBackupMaxBackups, {
+            deviceType,
+            hostname
           })
-
-          if (currentDeviceFiles.length > localBackupMaxBackups) {
-            // Sort by modified time (oldest first)
-            const filesToDelete = currentDeviceFiles
-              .sort((a, b) => new Date(a.modifiedTime).getTime() - new Date(b.modifiedTime).getTime())
-              .slice(0, currentDeviceFiles.length - localBackupMaxBackups)
-
-            // Delete older backups
-            for (const file of filesToDelete) {
-              logger.verbose(`[LocalBackup] Deleting old backup: ${file.fileName}`)
-              await window.api.backup.deleteLocalBackupFile(file.fileName, localBackupDir)
-            }
+          for (const file of appFilesToDelete) {
+            logger.verbose(`[LocalBackup] Deleting old app backup: ${file.fileName}`)
+            await window.api.backup.deleteLocalBackupFile(file.fileName, localBackupDir)
           }
         } catch (error) {
           logger.error('[LocalBackup] Failed to clean up old backups:', error as Error)
@@ -1440,6 +1469,35 @@ export async function backupMigrationToLocal({
       })
     }
 
+    if (result) {
+      const { localBackupMaxBackups } = store.getState().settings
+      if (localBackupMaxBackups > 0) {
+        try {
+          const files = await window.api.backup.listLocalBackupFiles(localBackupDir)
+
+          // PC Migration Cleanup
+          const pcFilesToDelete = getRemotePortableBackupFilesToDelete(files, localBackupMaxBackups, {
+            deviceType: '',
+            hostname: ''
+          })
+          for (const file of pcFilesToDelete) {
+            await window.api.backup.deleteLocalBackupFile(file.fileName, localBackupDir)
+          }
+
+          // App Migration Cleanup
+          const appFilesToDelete = getAppMigrationBackupFilesToDelete(files, localBackupMaxBackups, {
+            deviceType: '',
+            hostname: ''
+          })
+          for (const file of appFilesToDelete) {
+            await window.api.backup.deleteLocalBackupFile(file.fileName, localBackupDir)
+          }
+        } catch (error) {
+          logger.error('[LocalMigrationBackup] Failed to cleanup old backups:', error as Error)
+        }
+      }
+    }
+
     return result
   } catch (error: any) {
     logger.error('[LocalMigrationBackup] Backup failed:', error)
@@ -1483,4 +1541,75 @@ export async function restoreFromLocal(fileName: string) {
     window.toast.error(i18n.t('error.backup.file_format'))
     throw error
   }
+}
+
+export function getLocalBackupFilesToDelete(
+  files: any[],
+  maxBackups: number,
+  context?: { deviceType?: string; hostname?: string }
+) {
+  // Filter backups for current device if context provided
+  const currentDeviceFiles = files.filter((file) => {
+    // Only count files that look like timestamped backups
+    // e.g. cherry-studio.20240101120000... or matches direct snapshot marker
+    const isBackup = file.fileName.match(/^cherry-studio\.\d{14}/) || isDirectPcSnapshotArtifactFile(file.fileName)
+    if (!isBackup) return false
+
+    if (!context?.deviceType || !context?.hostname) return true
+    return file.fileName.includes(context.deviceType) && file.fileName.includes(context.hostname)
+  })
+
+  if (currentDeviceFiles.length <= maxBackups) return []
+
+  // Sort by modified time (oldest first) and slice the oldest ones
+  return currentDeviceFiles
+    .sort((a, b) => new Date(a.modifiedTime).getTime() - new Date(b.modifiedTime).getTime())
+    .slice(0, currentDeviceFiles.length - maxBackups)
+}
+
+export function getRemotePortableBackupFilesToDelete(
+  files: any[],
+  maxBackups: number,
+  context?: { deviceType?: string; hostname?: string }
+) {
+  // Filter current device and portable files
+  const currentDeviceFiles = files
+    .filter((file) => {
+      // If context is provided, we filter by device.
+      // If not (like in tests), we might be doing a global cleanup.
+      const isDeviceMatch =
+        context?.deviceType && context?.hostname
+          ? file.fileName.includes(context.deviceType) && file.fileName.includes(context.hostname)
+          : true
+
+      return isDeviceMatch && isRemotePortablePcBackupFile(file.fileName)
+    })
+    .sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
+
+  if (currentDeviceFiles.length <= maxBackups) return []
+
+  // Files are sorted descending (newest first), so slice the oldest ones at the end
+  return currentDeviceFiles.slice(maxBackups)
+}
+
+export function getAppMigrationBackupFilesToDelete(
+  files: any[],
+  maxBackups: number,
+  context?: { deviceType?: string; hostname?: string }
+) {
+  // Filter backups for current device if context provided
+  const currentDeviceFiles = files.filter((file) => {
+    const isAppBackup = isMobileSyncArtifactFile(file.fileName)
+    if (!isAppBackup) return false
+
+    if (!context?.deviceType || !context?.hostname) return true
+    return file.fileName.includes(context.deviceType) && file.fileName.includes(context.hostname)
+  })
+
+  if (currentDeviceFiles.length <= maxBackups) return []
+
+  // Sort by modified time (oldest first) and slice the oldest ones
+  return currentDeviceFiles
+    .sort((a, b) => new Date(a.modifiedTime).getTime() - new Date(b.modifiedTime).getTime())
+    .slice(0, currentDeviceFiles.length - maxBackups)
 }

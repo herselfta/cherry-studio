@@ -61,7 +61,7 @@ const TopicMessages: FC<Props> = ({ topic: _topic, ...props }) => {
     const navigationState = createHomeNavigationStateForTopic({ assistantId: topic.assistantId, topicId: topic.id })
 
     setPendingHomeNavigationState(navigationState)
-    await SearchPopup.hide()
+    SearchPopup.hide()
     await dispatch(loadTopicMessagesThunk(topic.id))
 
     if (isHomeRouteActive()) {

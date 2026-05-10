@@ -105,7 +105,7 @@ export async function locateToMessage(navigate: NavigateFunction, message: Messa
   const navigationState = createHomeNavigationStateForMessage(message)
 
   setPendingHomeNavigationState(navigationState)
-  await SearchPopup.hide()
+  SearchPopup.hide()
   await store.dispatch(loadTopicMessagesThunk(message.topicId))
 
   if (isHomeRouteActive()) {

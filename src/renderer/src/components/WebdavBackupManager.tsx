@@ -1,6 +1,8 @@
 import { DeleteOutlined, ExclamationCircleOutlined, ReloadOutlined } from '@ant-design/icons'
 import { isRemotePortablePcBackupFile, restoreFromWebdav } from '@renderer/services/BackupService'
 import { formatFileSize } from '@renderer/utils'
+import { createAlwaysVisiblePaginationConfig } from '@renderer/utils/pagination'
+import type { PaginationProps } from 'antd'
 import { Button, message, Modal, Segmented, Table, Tooltip } from 'antd'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useState } from 'react'
@@ -59,11 +61,13 @@ export function WebdavBackupManager({
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [deleting, setDeleting] = useState(false)
   const [restoring, setRestoring] = useState(false)
-  const [pagination, setPagination] = useState({
-    current: 1,
-    pageSize: 5,
-    total: 0
-  })
+  const [pagination, setPagination] = useState<PaginationProps>(
+    createAlwaysVisiblePaginationConfig({
+      current: 1,
+      pageSize: 5,
+      total: 0
+    })
+  )
 
   const { webdavHost, webdavUser, webdavPass, webdavPath } = webdavConfig
 

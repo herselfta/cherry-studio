@@ -257,3 +257,14 @@
   width: 4px !important;
   background-color: var(--color-primary) !important;
 }
+
+/* 确保分页跳转图标在非悬浮状态下也可见，并隐藏默认的省略号 */
+.ant-pagination-jump-prev .ant-pagination-item-link-icon,
+.ant-pagination-jump-next .ant-pagination-item-link-icon {
+  display: inline-block !important;
+  opacity: 1 !important;
+}
+
+.ant-pagination-item-ellipsis {
+  display: none !important;
+}

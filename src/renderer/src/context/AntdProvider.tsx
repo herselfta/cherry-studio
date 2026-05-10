@@ -26,6 +26,9 @@ const AntdProvider: FC<PropsWithChildren> = ({ children }) => {
   return (
     <ConfigProvider
       locale={getAntdLocale(language)}
+      pagination={{
+        showSizeChanger: true
+      }}
       theme={{
         cssVar: true,
         hashed: false,
